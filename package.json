@@ -36,7 +36,8 @@
 	"scripts": {
 		"build": "emdash-plugin build",
 		"validate": "emdash-plugin validate",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"prepare": "npm run build"
 	},
 	"peerDependencies": {
 		"emdash": ">=0.15.0"
