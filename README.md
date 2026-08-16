@@ -109,8 +109,9 @@ For accurate status even when the customer closes the browser, add a webhook in 
 portal (Portal → Developer → Webhooks):
 
 - **Callback URL:** `https://yoursite.com/_emdash/api/plugins/chip-for-emdash/callback`
-- **Events:** at least `purchase.paid` and `purchase.payment_failure` (any `purchase.*`
-  event works).
+- **Events:** subscribe to **all** `purchase.*` and `payment.*` events — at minimum
+  `purchase.paid`, `purchase.payment_failure`, `purchase.pending_refund`,
+  `purchase.refund_failure`, and `payment.refunded`.
 
 Each webhook is answered with HTTP 200 immediately and re-verified against the CHIP API
 before the payment record is updated.
@@ -155,17 +156,30 @@ secret key. `settings:publicKey` is stored so a future raw-body upgrade is drop-
 
 ## Status mapping
 
-CHIP statuses are normalized to the plugin's five-status model:
+CHIP statuses are normalized to the plugin's six-status model:
 
 | CHIP status | Recorded |
 |---|---|
-| `paid`, `cleared`, `settled`, `refunded`* | `paid` |
+| `paid`, `cleared`, `settled` | `paid` |
 | `error`, `blocked` | `failed` |
 | `cancelled` | `cancelled` |
 | `hold` | `hold` |
+| `refunded`, `chargeback`, `pending_refund` | `refunded` |
 | everything else (`created`, `sent`, `viewed`, `pending_*`, …) | `created` |
 
-\* Refund handling is out of MVP scope; a refunded purchase stays `paid`.
+## Refunds
+
+Refunds are merchant-initiated in the CHIP portal; the plugin never moves money. When a
+purchase is refunded, CHIP sets its status to `refunded` (fully or partially) and emits
+`purchase.pending_refund` / `payment.refunded` webhooks. The plugin's webhook handler
+accepts both Purchase payloads (top-level `id`) and the `payment.refunded` Payment
+payload (purchase id in `related_to`), re-verifies against the CHIP API, and flips the
+record to `refunded`. A failed refund (`purchase.refund_failure`) reverts the purchase to
+`paid`, which verify-by-query records as such.
+
+> Webhooks are the only channel that can surface a refund — the customer never revisits
+> the return route — so subscribe to the refund events listed above or the record will
+> keep showing `paid`.
 
 ## Platform notes (deviations from the PRD)
 

@@ -125,7 +125,7 @@ Fetch the spec, don't hardcode from memory: **https://docs.chip-in.asia/openapi/
 
 ### Purchase statuses
 
-`created` → `paid` | `failed` | `cancelled` (plus `hold` for pre-auth). The plugin stores the latest confirmed status.
+`created` → `paid` | `failed` | `cancelled` (plus `hold` for pre-auth), and `refunded` for CHIP-dashboard refunds (webhook-only detection). The plugin stores the latest confirmed status.
 
 ---
 
@@ -204,7 +204,7 @@ interface PaymentRecord {
   reference: string;          // site's own order/product reference
   amount: number;             // cents
   currency: string;
-  status: "created" | "paid" | "failed" | "cancelled" | "hold";
+  status: "created" | "paid" | "failed" | "cancelled" | "hold" | "refunded";
   productName: string;
   clientEmail?: string;
   metadata?: Record<string, unknown>; // passthrough for the site

@@ -46,8 +46,8 @@ const SETTINGS_KEYS = {
 	cancelUrl: "settings:cancelUrl",
 } as const;
 
-/** Statuses the plugin persists. Kept intentionally small — see PRD §4.5. */
-type PaymentStatus = "created" | "paid" | "failed" | "cancelled" | "hold";
+/** Statuses the plugin persists. PRD §4.5's five-status model, extended with `refunded` (CHIP-dashboard refunds are a real merchant flow; see README "Refunds"). */
+type PaymentStatus = "created" | "paid" | "failed" | "cancelled" | "hold" | "refunded";
 
 interface PaymentRecord {
 	/** Plugin-generated record id. */
@@ -296,8 +296,9 @@ async function getChipPublicKey(ctx: PluginContext): Promise<{ ok: boolean; erro
 /**
  * Map CHIP's purchase status vocabulary to the plugin's PaymentStatus.
  * Only `paid`-family statuses count as paid; refund-related statuses
- * keep the record at `paid` (money was received; refunds are out of
- * MVP scope). Anything else is "created" (unpaid / still payable).
+ * map to `refunded` (a failed refund reverts the purchase to `paid`,
+ * which the mapping handles naturally). Everything else is "created"
+ * (unpaid / still payable).
  */
 function normalizeStatus(raw: unknown): PaymentStatus | undefined {
 	if (typeof raw !== "string") return undefined;
@@ -305,9 +306,6 @@ function normalizeStatus(raw: unknown): PaymentStatus | undefined {
 		case "paid":
 		case "cleared":
 		case "settled":
-		case "refunded":
-		case "chargeback":
-		case "pending_refund":
 			return "paid";
 		case "error":
 		case "blocked":
@@ -316,6 +314,10 @@ function normalizeStatus(raw: unknown): PaymentStatus | undefined {
 			return "cancelled";
 		case "hold":
 			return "hold";
+		case "refunded":
+		case "chargeback":
+		case "pending_refund":
+			return "refunded";
 		default:
 			return "created";
 	}
@@ -326,6 +328,27 @@ function paidOnOf(purchase: Record<string, unknown>): string | undefined {
 	const payment = getRecord(purchase, "payment");
 	const paidOn = getNumber(payment ?? {}, "paid_on");
 	return paidOn ? new Date(paidOn * 1000).toISOString() : undefined;
+}
+
+/**
+ * Pull the CHIP purchase id from a webhook/callback payload. Purchase
+ * payloads (`purchase.*` events, success_callback) carry `id` at the
+ * top level; `payment.refunded` delivers a Payment object whose
+ * top-level `id` is the PAYMENT's own id and whose `related_to` points
+ * at the originating purchase — so `related_to` wins when present.
+ */
+function extractPurchaseId(input: Record<string, unknown>): string | undefined {
+	const relatedTo = getRecord(input, "related_to");
+	if (relatedTo && getString(relatedTo, "type") === "purchase") {
+		const relatedId = getString(relatedTo, "id");
+		if (relatedId) return relatedId;
+	}
+	const direct = getString(input, "id");
+	if (direct) return direct;
+	const object = getRecord(input, "object");
+	const objectId = object ? getString(object, "id") : undefined;
+	if (objectId) return objectId;
+	return undefined;
 }
 
 /**
@@ -584,7 +607,7 @@ const returnHandler: RouteHandler = async (routeCtx, ctx) => {
 	// not append the purchase id to redirect URLs); CHIP's server
 	// callbacks POST the Purchase object, so fall back to its id.
 	const token = getString(input, "token");
-	const bodyId = getString(input, "id") ?? getString(getRecord(input, "object"), "id");
+	const bodyId = extractPurchaseId(input);
 
 	const entry = token
 		? await findPaymentByReturnToken(ctx, token)
@@ -644,7 +667,7 @@ const returnHandler: RouteHandler = async (routeCtx, ctx) => {
 const callbackHandler: RouteHandler = async (routeCtx, ctx) => {
 	try {
 		const input = isRecord(routeCtx.input) ? routeCtx.input : {};
-		const purchaseId = getString(input, "id") ?? getString(getRecord(input, "object"), "id");
+		const purchaseId = extractPurchaseId(input);
 		if (!purchaseId) {
 			ctx.log.warn("CHIP webhook received without a purchase id");
 			return { ok: true };
@@ -1007,11 +1030,12 @@ async function buildPaymentsPage(ctx: PluginContext, cursor: string | undefined)
 
 async function buildChipWidget(ctx: PluginContext) {
 	try {
-		const [paid, pending, failed, cancelled] = await Promise.all([
+		const [paid, pending, failed, cancelled, refunded] = await Promise.all([
 			ctx.storage.payments!.count({ status: "paid" }),
 			ctx.storage.payments!.count({ status: "created" }),
 			ctx.storage.payments!.count({ status: "failed" }),
 			ctx.storage.payments!.count({ status: "cancelled" }),
+			ctx.storage.payments!.count({ status: "refunded" }),
 		]);
 		return {
 			blocks: [
@@ -1022,6 +1046,7 @@ async function buildChipWidget(ctx: PluginContext) {
 						{ label: "Pending", value: String(pending) },
 						{ label: "Failed", value: String(failed) },
 						{ label: "Cancelled", value: String(cancelled) },
+						{ label: "Refunded", value: String(refunded) },
 					],
 				},
 			],
