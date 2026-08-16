@@ -1,0 +1,34 @@
+{
+	"$schema": "./node_modules/@emdash-cms/plugin-cli/schemas/emdash-plugin.schema.json",
+
+	"slug": "chip-for-emdash",
+	// TODO: replace with the real atproto DID before publishing —
+	// run `npx @emdash-cms/plugin-cli login` and paste the resolved
+	// DID here (e.g. "did:plc:..."). The value below is a placeholder
+	// handle that satisfies the manifest schema; the runtime cannot
+	// compute the registry AT URI without a real publisher identity.
+	"publisher": "chip-in.asia",
+
+	"license": "MIT",
+	"author": { "name": "CHIP Asia", "url": "https://chip-in.asia" },
+	"security": { "url": "https://github.com/CHIPAsia/chip-for-emdash/security/advisories/new" },
+	"description": "Accept CHIP payments (FPX, e-wallet, card, DuitNow QR) on any EmDash site via CHIP's hosted checkout.",
+
+	// Trust contract — outbound HTTP is restricted to the CHIP Collect
+	// API host only. Declares the `payments` storage collection where
+	// each payment attempt is recorded.
+	"capabilities": ["network:request"],
+	"allowedHosts": ["gate.chip-in.asia"],
+
+	"storage": {
+		"payments": { "indexes": ["status", "reference", "purchaseId", "returnToken", "createdAt"] }
+	},
+
+	"admin": {
+		"pages": [
+			{ "path": "/settings", "label": "CHIP Settings", "icon": "settings" },
+			{ "path": "/payments", "label": "CHIP Payments", "icon": "credit-card" }
+		],
+		"widgets": [{ "id": "chip-summary", "title": "CHIP Payments", "size": "third" }]
+	}
+}
