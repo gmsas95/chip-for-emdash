@@ -1,0 +1,16 @@
+{
+  "name": "@emdash-commerce/workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.base.json",
+    "test": "vitest run",
+    "build": "tsc --noEmit false --module NodeNext --moduleResolution NodeNext --target ES2022 --declaration --declarationMap --sourceMap --outDir packages/commerce-contracts/dist --rootDir packages/commerce-contracts/src packages/commerce-contracts/src/version.ts",
+    "lint": "tsc --noEmit -p tsconfig.base.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

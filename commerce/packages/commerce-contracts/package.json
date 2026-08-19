@@ -1,0 +1,17 @@
+{
+  "name": "@emdash-commerce/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": {
+        "types": "./src/version.ts",
+        "import": "./src/version.ts"
+      },
+      "types": "./dist/version.d.ts",
+      "import": "./dist/version.js"
+    }
+  },
+  "files": ["dist"]
+}
