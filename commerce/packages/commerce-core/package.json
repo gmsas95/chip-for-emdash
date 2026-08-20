@@ -1,6 +1,9 @@
 {
   "name": "@emdash-commerce/core",
   "version": "0.1.0",
+  "description": "Native EmDash Commerce Core plugin, bridge, admin pages, and storefront client.",
+  "license": "MIT",
+  "repository": "https://github.com/gmsas95/emdash-commerce-core",
   "private": true,
   "type": "module",
   "scripts": {
