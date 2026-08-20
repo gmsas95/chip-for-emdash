@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const coreDirectory = process.cwd();
-const workspaceDirectory = join(coreDirectory, "../..");
+const contractsDirectory = join(coreDirectory, "../commerce-contracts");
 const consumerDirectory = mkdtempSync(join(tmpdir(), "emdash-commerce-consumer-"));
 const scopeDirectory = join(consumerDirectory, "node_modules", "@emdash-commerce");
 mkdirSync(scopeDirectory, { recursive: true });
 symlinkSync(coreDirectory, join(scopeDirectory, "core"));
-symlinkSync(join(workspaceDirectory, "commerce-contracts"), join(scopeDirectory, "contracts"));
+symlinkSync(contractsDirectory, join(scopeDirectory, "contracts"));
 
 const consumerScript = [
   'import { calculateTotals } from "@emdash-commerce/core";',
