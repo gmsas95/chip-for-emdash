@@ -121,3 +121,17 @@ export {
   createPlugin,
   type CommercePluginOptions,
 } from "./plugin.js";
+export {
+  CommerceApiError,
+  createCommerceClient,
+  type CommerceFetcher,
+} from "./storefront/client.js";
+export type {
+  CartCreateInput,
+  CartLineInput,
+  CartResult,
+  CatalogResult,
+  CheckoutResult,
+  CheckoutStartInput,
+  CommerceClient,
+} from "./storefront/types.js";
