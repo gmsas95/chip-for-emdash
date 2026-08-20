@@ -648,7 +648,7 @@ const returnHandler: RouteHandler = async (routeCtx, ctx) => {
 	if (status) {
 		await updatePaymentStatus(ctx, entry, status, paidOnOf(purchase));
 		try {
-			await emitCommerceEvent(ctx, await loadSettings(ctx), `commerce.payment.${status === "hold" ? "created" : status}`, entry.data);
+			await emitCommerceEvent(ctx, await loadSettings(ctx), `commerce.payment.${status === "hold" ? "created" : status}`, { ...entry.data, status: status === "hold" ? "created" : status });
 		} catch (error) {
 			ctx.log.error("Failed to emit Commerce payment event", error);
 		}
@@ -706,7 +706,7 @@ const callbackHandler: RouteHandler = async (routeCtx, ctx) => {
 		if (status) {
 			await updatePaymentStatus(ctx, entry, status, paidOnOf(verified.purchase));
 			try {
-				await emitCommerceEvent(ctx, await loadSettings(ctx), `commerce.payment.${status === "hold" ? "created" : status}`, entry.data);
+				await emitCommerceEvent(ctx, await loadSettings(ctx), `commerce.payment.${status === "hold" ? "created" : status}`, { ...entry.data, status: status === "hold" ? "created" : status });
 			} catch (error) {
 				ctx.log.error("Failed to emit Commerce payment event", error);
 			}

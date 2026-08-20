@@ -54,6 +54,10 @@ function response<T>(requestId: string, data: T): Record<string, unknown> {
 function failure(requestId: string, code: string, message: string, retryable: boolean): Record<string, unknown> {
 	return { requestId, ok: false, error: { code, message, retryable } };
 }
+function providerErrorRetryable(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : "";
+	return !/secret key|network:request|not configured/i.test(message);
+}
 
 async function authenticate(
 	routeCtx: Parameters<RouteHandler>[0],
@@ -194,8 +198,8 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 				...(callbackAllowed ? { success_callback: returnUrl } : {}),
 				metadata: { commerceOrderId: orderId, commercePaymentId: auth.request.requestId, idempotencyKey: auth.request.idempotencyKey },
 			});
-		} catch {
-			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment provider unavailable", true);
+		} catch (error) {
+			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment provider unavailable", providerErrorRetryable(error));
 		}
 		const purchaseId = created.purchase && typeof created.purchase.id === "string" ? created.purchase.id : undefined;
 		const checkoutUrl = created.purchase && typeof created.purchase.checkout_url === "string" ? created.purchase.checkout_url : undefined;
@@ -230,8 +234,8 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 		let verified: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
 		try {
 			verified = await deps.getChipPurchase(ctx, entry.data.purchaseId);
-		} catch {
-			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment reconciliation unavailable", true);
+		} catch (error) {
+			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment reconciliation unavailable", providerErrorRetryable(error));
 		}
 		if (!verified.purchase) return failure(auth.request.requestId, "PROVIDER_ERROR", verified.error ?? "Payment reconciliation failed", verified.retryable === true);
 		const normalizedRaw = deps.normalizeStatus(verified.purchase.status);
@@ -264,8 +268,8 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 		let verified: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
 		try {
 			verified = await deps.getChipPurchase(ctx, entry.data.purchaseId);
-		} catch {
-			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment reconciliation unavailable", true);
+		} catch (error) {
+			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment reconciliation unavailable", providerErrorRetryable(error));
 		}
 		if (!verified.purchase || typeof verified.purchase.status !== "string") return failure(auth.request.requestId, "PROVIDER_ERROR", verified.error ?? "Payment reconciliation failed", verified.retryable === true);
 		const normalized = deps.normalizeStatus(verified.purchase.status);
