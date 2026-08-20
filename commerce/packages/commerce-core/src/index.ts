@@ -116,3 +116,8 @@ export {
   type ProviderConnection,
   type ProviderRegistry,
 } from "./bridge/provider-registry.js";
+export {
+  commercePlugin,
+  createPlugin,
+  type CommercePluginOptions,
+} from "./plugin.js";

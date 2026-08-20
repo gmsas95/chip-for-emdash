@@ -6,7 +6,8 @@
     "strict": true,
     "customConditions": ["development"],
     "noEmit": true,
+    "jsx": "react-jsx",
     "skipLibCheck": true
   },
-  "include": ["packages/**/*.ts", "vitest.config.ts"]
+  "include": ["packages/**/*.ts", "packages/**/*.tsx", "vitest.config.ts"]
 }
