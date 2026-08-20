@@ -1,4 +1,4 @@
-import { CommerceContractError, CONTRACT_ERROR_CODES } from "../../../commerce-contracts/src/money.js";
+import { CommerceContractError, CONTRACT_ERROR_CODES } from "@emdash-commerce/contracts";
 import {
   assertCurrency,
   assertSafeNonNegativeMinorUnit,
@@ -39,7 +39,7 @@ function invalidInput(message: string): never {
   throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_INPUT, message);
 }
 
-export function calculateTotals(input: TotalsInput): OrderTotals {
+export function calculateSubtotalMinor(input: Pick<TotalsInput, "currency" | "lines">): number {
   if (!isRecord(input)) {
     return invalidInput("Totals input must be an object");
   }
@@ -70,6 +70,15 @@ export function calculateTotals(input: TotalsInput): OrderTotals {
     subtotalMinor = checkedAdd(subtotalMinor, lineTotalMinor, "subtotalMinor");
   }
 
+  return subtotalMinor;
+}
+
+export function calculateTotals(input: TotalsInput): OrderTotals {
+  if (!isRecord(input)) {
+    return invalidInput("Totals input must be an object");
+  }
+
+  const subtotalMinor = calculateSubtotalMinor(input);
   assertSafeNonNegativeMinorUnit(input.discountMinor, "discountMinor");
   assertSafeNonNegativeMinorUnit(input.taxMinor, "taxMinor");
   assertSafeNonNegativeMinorUnit(input.shippingMinor, "shippingMinor");

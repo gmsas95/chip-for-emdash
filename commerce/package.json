@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.base.json",
     "test": "vitest run",
-    "build": "tsc --noEmit false --module NodeNext --moduleResolution NodeNext --target ES2022 --declaration --declarationMap --sourceMap --outDir packages/commerce-contracts/dist --rootDir packages/commerce-contracts/src packages/commerce-contracts/src/index.ts",
+    "build": "pnpm --filter @emdash-commerce/contracts build && pnpm --filter @emdash-commerce/core build",
     "lint": "tsc --noEmit -p tsconfig.base.json"
   },
   "devDependencies": {

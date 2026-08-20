@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit false --module NodeNext --moduleResolution NodeNext --target ES2022 --declaration --declarationMap --sourceMap --outDir dist --rootDir src src/index.ts",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.base.json"
+  },
   "exports": {
     ".": {
       "development": {
@@ -11,7 +15,18 @@
       },
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./domain/*": {
+      "development": {
+        "types": "./src/domain/*.ts",
+        "import": "./src/domain/*.ts"
+      },
+      "types": "./dist/domain/*.d.ts",
+      "import": "./dist/domain/*.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "dependencies": {
+    "@emdash-commerce/contracts": "workspace:*"
+  }
 }

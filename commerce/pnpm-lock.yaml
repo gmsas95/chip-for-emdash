@@ -17,7 +17,11 @@ importers:
 
   packages/commerce-contracts: {}
 
-  packages/commerce-core: {}
+  packages/commerce-core:
+    dependencies:
+      '@emdash-commerce/contracts':
+        specifier: workspace:*
+        version: link:../commerce-contracts
 
   packages/commerce-test-fixtures: {}
 

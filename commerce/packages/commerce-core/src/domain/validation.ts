@@ -1,10 +1,7 @@
-import { isISO4217CurrencyCode } from "../../../commerce-contracts/src/money.js";
-import {
-  isSafeNonNegativeMinorUnit,
-  isSafeQuantity,
-} from "./money.js";
-import { calculateTotals } from "./totals.js";
-import type { TotalsInput } from "./totals.js";
+import { isISO4217CurrencyCode } from "@emdash-commerce/contracts";
+import { isSafeQuantity } from "./money.js";
+import { calculateSubtotalMinor, calculateTotals } from "./totals.js";
+import type { TotalsInput, TotalsLine } from "./totals.js";
 
 export type CheckoutInput = TotalsInput;
 
@@ -59,12 +56,13 @@ export function validateCheckout(input: CheckoutInput): ValidationResult {
   }
 
   const currency = input.currency;
-  if (!isISO4217CurrencyCode(currency)) {
+  const currencyIsValid = isISO4217CurrencyCode(currency);
+  if (!currencyIsValid) {
     errors.push({ code: "INVALID_CURRENCY", field: "currency", message: "currency must be an ISO 4217 code" });
   }
 
   const lines = input.lines;
-  let subtotalMinor = 0;
+  const validLines: TotalsLine[] = [];
   if (!Array.isArray(lines)) {
     errors.push({ code: "INVALID_INPUT", field: "lines", message: "lines must be an array" });
   } else {
@@ -77,43 +75,63 @@ export function validateCheckout(input: CheckoutInput): ValidationResult {
 
       const unitAmountField = `${prefix}.unitAmountMinor`;
       const quantityField = `${prefix}.quantity`;
-      const amountErrorForLine = amountError(line.unitAmountMinor, unitAmountField);
+      const unitAmountMinor = line.unitAmountMinor;
+      const quantity = line.quantity;
+      const amountErrorForLine = amountError(unitAmountMinor, unitAmountField);
       if (amountErrorForLine) {
         errors.push(amountErrorForLine);
       }
-      if (!isSafeQuantity(line.quantity)) {
+      const quantityIsValid = isSafeQuantity(quantity);
+      if (!quantityIsValid) {
         errors.push({ code: "INVALID_QUANTITY", field: quantityField, message: `${quantityField} must be at least one safe integer` });
       }
 
+      let lineCurrencyIsValid = true;
       if (line.currency !== undefined) {
         const lineCurrencyField = `${prefix}.currency`;
         if (!isISO4217CurrencyCode(line.currency)) {
+          lineCurrencyIsValid = false;
           errors.push({ code: "INVALID_CURRENCY", field: lineCurrencyField, message: `${lineCurrencyField} must be an ISO 4217 code` });
-        } else if (isISO4217CurrencyCode(currency) && line.currency !== currency) {
+        } else if (currencyIsValid && line.currency !== currency) {
+          lineCurrencyIsValid = false;
           errors.push({ code: "MIXED_CURRENCIES", field: lineCurrencyField, message: `${lineCurrencyField} must match currency` });
         }
       }
 
-      if (!amountErrorForLine && isSafeQuantity(line.quantity)) {
-        const lineTotalMinor = line.unitAmountMinor * line.quantity;
-        if (!Number.isSafeInteger(lineTotalMinor)) {
-          errors.push({ code: "TOTAL_NOT_SAFE", field: `${prefix}.totalMinor`, message: `${prefix} total is not a safe integer` });
-        } else {
-          subtotalMinor += lineTotalMinor;
-          if (!Number.isSafeInteger(subtotalMinor)) {
-            errors.push({ code: "TOTAL_NOT_SAFE", field: "subtotalMinor", message: "subtotalMinor is not a safe integer" });
-            subtotalMinor = Number.MAX_SAFE_INTEGER;
-          }
+      if (
+        currencyIsValid &&
+        amountErrorForLine === undefined &&
+        typeof unitAmountMinor === "number" &&
+        isSafeQuantity(quantity) &&
+        lineCurrencyIsValid
+      ) {
+        const validLine: TotalsLine = {
+          unitAmountMinor,
+          quantity,
+        };
+        if (typeof line.currency === "string") {
+          validLine.currency = line.currency;
         }
+        validLines.push(validLine);
       }
     }
   }
 
+  const discountError = amountError(input.discountMinor, "discountMinor");
   pushAmountError(errors, input.discountMinor, "discountMinor");
   pushAmountError(errors, input.taxMinor, "taxMinor");
   pushAmountError(errors, input.shippingMinor, "shippingMinor");
 
-  if (isSafeNonNegativeMinorUnit(input.discountMinor) && input.discountMinor > subtotalMinor) {
+  let subtotalMinor: number | undefined;
+  if (currencyIsValid && Array.isArray(lines)) {
+    try {
+      subtotalMinor = calculateSubtotalMinor({ currency, lines: validLines });
+    } catch {
+      errors.push({ code: "TOTAL_NOT_SAFE", field: "subtotalMinor", message: "subtotalMinor is not a safe integer" });
+    }
+  }
+
+  if (discountError === undefined && subtotalMinor !== undefined && input.discountMinor > subtotalMinor) {
     errors.push({
       code: "DISCOUNT_EXCEEDS_SUBTOTAL",
       field: "discountMinor",
@@ -126,8 +144,8 @@ export function validateCheckout(input: CheckoutInput): ValidationResult {
   }
 
   try {
-    calculateTotals(input as TotalsInput);
-  } catch (_error) {
+    calculateTotals(input);
+  } catch {
     return {
       valid: false,
       errors: [{ code: "TOTAL_NOT_SAFE", field: "totalMinor", message: "Checkout totals are not safe integers" }],

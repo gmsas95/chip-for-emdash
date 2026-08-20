@@ -55,4 +55,43 @@ describe("validateCheckout", () => {
       expect.objectContaining({ code: "INVALID_AMOUNT", field: "taxMinor" }),
     ]));
   });
+
+  it("reports overflow for structurally valid checkout lines", () => {
+    const result = validateCheckout({
+      currency: "MYR",
+      lines: [
+        { unitAmountMinor: Number.MAX_SAFE_INTEGER, quantity: 1 },
+        { unitAmountMinor: 1, quantity: 1 },
+      ],
+      discountMinor: 0,
+      taxMinor: 0,
+      shippingMinor: 0,
+    });
+
+    expect(result).toMatchObject({ valid: false });
+    if (result.valid) {
+      throw new Error("Expected invalid checkout result");
+    }
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "TOTAL_NOT_SAFE", field: "subtotalMinor" }),
+    ]));
+  });
+
+  it("reports an invalid root currency as a structured error", () => {
+    const result = validateCheckout({
+      currency: "not-a-currency",
+      lines: [],
+      discountMinor: 0,
+      taxMinor: 0,
+      shippingMinor: 0,
+    });
+
+    expect(result).toMatchObject({ valid: false });
+    if (result.valid) {
+      throw new Error("Expected invalid checkout result");
+    }
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "INVALID_CURRENCY", field: "currency" }),
+    ]));
+  });
 });
