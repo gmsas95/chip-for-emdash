@@ -3,6 +3,8 @@ import {
   CONTRACT_ERROR_CODES,
   CommerceContractError,
 } from "./money.js";
+import { parseLogisticsCommand } from "./logistics.js";
+import { parsePaymentCommand } from "./payment.js";
 
 export const BRIDGE_AUTH_VERSION = 1 as const;
 
@@ -74,6 +76,11 @@ export interface BridgeRequestValidationOptions<T = unknown> {
 
 const DEFAULT_MAX_AGE_MS = 5 * 60 * 1000;
 
+const BRIDGE_PAYLOAD_SCHEMAS: Readonly<Record<string, BridgePayloadParser<unknown>>> = {
+  "commerce.payment.create": parsePaymentCommand,
+  "commerce.logistics.create": parseLogisticsCommand,
+};
+
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input);
 }
@@ -87,12 +94,17 @@ function parseTimestamp(value: unknown): number | undefined {
   return Number.isNaN(timestamp) ? undefined : timestamp;
 }
 
-function parseNow(value: string | Date | undefined): number {
+function parseNow(value: string | Date | undefined): number | undefined {
+  if (value === undefined) {
+    return Date.now();
+  }
+
   if (value instanceof Date) {
     const timestamp = value.getTime();
     if (!Number.isNaN(timestamp)) {
       return timestamp;
     }
+    return undefined;
   }
 
   if (typeof value === "string") {
@@ -102,7 +114,7 @@ function parseNow(value: string | Date | undefined): number {
     }
   }
 
-  return Date.now();
+  return undefined;
 }
 
 function canonicalize(input: unknown): unknown {
@@ -144,8 +156,12 @@ export function getBridgeSigningData<T>(request: BridgeRequest<T>): string {
 
 export function parseBridgeRequest<T = unknown>(
   input: unknown,
-  options: BridgeRequestValidationOptions<T> = {},
-): BridgeRequest<T> {
+  options?: BridgeRequestValidationOptions<T>,
+): BridgeRequest<T>;
+export function parseBridgeRequest(
+  input: unknown,
+  options: BridgeRequestValidationOptions<unknown> = {},
+): BridgeRequest<unknown> {
   if (!isRecord(input)) {
     throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_INPUT, "Bridge request must be an object");
   }
@@ -198,6 +214,9 @@ export function parseBridgeRequest<T = unknown>(
     throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_REQUEST, "Invalid maxAgeMs");
   }
   const now = parseNow(options.now);
+  if (now === undefined) {
+    throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_REQUEST, "Invalid validation time");
+  }
   const age = now - sentAt;
   if (age > maxAgeMs || age < -maxAgeMs) {
     throw new CommerceContractError(CONTRACT_ERROR_CODES.STALE_REQUEST, "Stale bridge request");
@@ -210,13 +229,17 @@ export function parseBridgeRequest<T = unknown>(
     throw new CommerceContractError(CONTRACT_ERROR_CODES.DUPLICATE_REQUEST, "Duplicate bridge request");
   }
 
-  if (options.payloadParser === undefined) {
+  const payloadSchema = BRIDGE_PAYLOAD_SCHEMAS[input.contract];
+  if (payloadSchema === undefined && options.payloadParser === undefined) {
     throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_PAYLOAD, "A payload parser is required");
   }
 
-  let payload: T;
+  let payload: unknown;
   try {
-    payload = options.payloadParser(input.payload);
+    // Known Commerce contracts always use their own schema; custom parsers are for future contracts.
+    payload = payloadSchema === undefined
+      ? options.payloadParser!(input.payload)
+      : payloadSchema(input.payload);
   } catch (error) {
     if (error instanceof CommerceContractError) {
       throw error;

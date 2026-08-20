@@ -4,7 +4,6 @@ import {
   CommerceContractError,
   getBridgeSigningData,
   parseBridgeRequest,
-  parseLogisticsCommand,
   parseMoney,
   parsePaymentCommand,
 } from "../src/index.js";
@@ -123,6 +122,27 @@ describe("Commerce contracts", () => {
     );
   });
 
+  it("requires key identity, matching timestamp, and signature in bridge authentication metadata", () => {
+    const invalidAuthRequests = [
+      { ...validBridgeRequest.auth, keyId: "" },
+      { ...validBridgeRequest.auth, timestamp: "2026-08-20T12:00:01.000Z" },
+      { ...validBridgeRequest.auth, signature: "" },
+    ];
+    for (const auth of invalidAuthRequests) {
+      expectContractError(
+        () => parseBridgeRequest({ ...validBridgeRequest, auth }, { now: NOW }),
+        CONTRACT_ERROR_CODES.INVALID_AUTHENTICATION,
+      );
+    }
+  });
+
+  it("rejects an unsupported bridge authentication version with a stable error code", () => {
+    expectContractError(
+      () => parseBridgeRequest({ ...validBridgeRequest, auth: { ...validBridgeRequest.auth, version: 2 } }, { now: NOW }),
+      CONTRACT_ERROR_CODES.UNSUPPORTED_AUTH_VERSION,
+    );
+  });
+
   it("defines signing data without the circular signature field", () => {
     const signingData = JSON.parse(getBridgeSigningData(validBridgeRequest)) as Record<string, unknown>;
     expect(signingData).toMatchObject({
@@ -183,7 +203,7 @@ describe("Commerce contracts", () => {
 
   it("requires a payload parser at the bridge boundary", () => {
     expectContractError(
-      () => parseBridgeRequest(validBridgeRequest, { now: NOW }),
+      () => parseBridgeRequest({ ...validBridgeRequest, contract: "commerce.custom" }, { now: NOW }),
       CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
     );
   });
@@ -193,7 +213,18 @@ describe("Commerce contracts", () => {
       () =>
         parseBridgeRequest(
           { ...validBridgeRequest, payload: { operation: "charge", order: "not-an-order" } },
-          { now: NOW, payloadParser: parsePaymentCommand },
+          { now: NOW },
+        ),
+      CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
+    );
+  });
+
+  it("does not allow a custom parser to bypass the known payment schema", () => {
+    expectContractError(
+      () =>
+        parseBridgeRequest(
+          { ...validBridgeRequest, payload: { operation: "charge", order: "not-an-order" } },
+          { now: NOW, payloadParser: (payload) => payload as typeof validPaymentPayload },
         ),
       CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
     );
@@ -221,9 +252,23 @@ describe("Commerce contracts", () => {
       () =>
         parseBridgeRequest(
           { ...validBridgeRequest, contract: "commerce.logistics.create", payload: { operation: "create", order: null } },
-          { now: NOW, payloadParser: parseLogisticsCommand },
+          { now: NOW },
         ),
       CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
+    );
+  });
+
+  it("requires an explicit schema for unknown bridge contracts", () => {
+    expectContractError(
+      () => parseBridgeRequest({ ...validBridgeRequest, contract: "commerce.custom" }, { now: NOW }),
+      CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
+    );
+  });
+
+  it("rejects an invalid validation clock instead of using wall-clock time", () => {
+    expectContractError(
+      () => parseBridgeRequest(validBridgeRequest, { now: "not-a-timestamp", payloadParser: parsePaymentCommand }),
+      CONTRACT_ERROR_CODES.INVALID_REQUEST,
     );
   });
 
