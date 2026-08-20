@@ -75,6 +75,16 @@ describe("Commerce repositories", () => {
     expect([firstPage.items[0].id, secondPage.items[0].id, thirdPage.items[0].id]).toEqual(["p-1", "p-2", "p-3"]);
   });
 
+
+  it("uses stable insertion order for default memory pages", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.products.put("p-1", { id: "p-1", status: "published", createdAt: "2026-08-20T02:00:00.000Z" });
+    await repositories.products.put("p-2", { id: "p-2", status: "published", createdAt: "2026-08-20T01:00:00.000Z" });
+
+    const result = await repositories.products.query({ limit: 1 });
+
+    expect(result.items[0].id).toBe("p-1");
+  });
   it("adapts EmDash null, boolean-delete, limits, and paginated results", async () => {
     let firstLimit: number | undefined;
     const collection = {

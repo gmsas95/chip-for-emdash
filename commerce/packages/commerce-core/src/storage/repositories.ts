@@ -241,6 +241,8 @@ function cloneDocument<T extends object>(document: T): T {
 }
 function createMemoryRepository<T extends object>(indexes: readonly string[]): DocumentRepository<T> {
   const documents = new Map<string, T>();
+  const sequenceById = new Map<string, number>();
+  let nextSequence = 0;
 
   return {
     async get(id) {
@@ -248,25 +250,35 @@ function createMemoryRepository<T extends object>(indexes: readonly string[]): D
       return document === undefined ? undefined : cloneDocument(document);
     },
     async put(id, document) {
+      if (!sequenceById.has(id)) {
+        sequenceById.set(id, nextSequence);
+        nextSequence += 1;
+      }
       documents.set(id, cloneDocument(document));
     },
     async delete(id) {
       documents.delete(id);
+      sequenceById.delete(id);
     },
     async query(options = {}) {
       assertIndexed(options, indexes);
       const limit = normalizeLimit(options.limit);
-      const orderEntries = Object.entries(options.orderBy ?? { createdAt: "asc" as const }) as Array<[string, "asc" | "desc"]>;
+      const defaultOrder = Object.keys(options.orderBy ?? {}).length === 0;
+      const orderEntries = (defaultOrder
+        ? [["__storageSequence", "asc"]]
+        : Object.entries(options.orderBy ?? {})) as Array<[string, "asc" | "desc"]>;
       if (orderEntries.length === 0) {
         throw new StorageQueryError("Storage query requires an order field");
       }
+      const orderedValue = (item: { id: string; data: T }, field: string): unknown =>
+        field === "__storageSequence" ? sequenceById.get(item.id) : fieldValue(item.data, field);
       const cursor = options.cursor === undefined ? undefined : decodeCursor(options.cursor, orderEntries);
       let items = [...documents.entries()]
         .filter(([, document]) => matchesWhere(document, options.where))
         .map(([id, document]) => ({ id, data: cloneDocument(document) }));
       items.sort((left, right) => {
         for (const [field, orderDirection] of orderEntries) {
-          const comparison = compareValues(fieldValue(left.data, field), fieldValue(right.data, field));
+          const comparison = compareValues(orderedValue(left, field), orderedValue(right, field));
           if (comparison !== 0) {
             return orderDirection === "desc" ? -comparison : comparison;
           }
@@ -281,7 +293,7 @@ function createMemoryRepository<T extends object>(indexes: readonly string[]): D
             if (!part) {
               throw new StorageQueryError("Invalid storage cursor");
             }
-            const comparison = compareValues(fieldValue(item.data, field), part.value);
+            const comparison = compareValues(orderedValue(item, field), part.value);
             if (comparison !== 0) {
               return direction === "desc" ? comparison < 0 : comparison > 0;
             }
@@ -301,7 +313,7 @@ function createMemoryRepository<T extends object>(indexes: readonly string[]): D
             order: orderEntries.map(([field, direction]) => ({
               field,
               direction,
-              value: orderValue(fieldValue(last.data, field)),
+              value: orderValue(orderedValue(last, field)),
             })),
             id: last.id,
           }),
