@@ -8,19 +8,24 @@ import { createOrderSnapshot } from "./domain/orders.js";
 import type { OrderSnapshot } from "./domain/orders.js";
 import { createMemoryReplayStore, verifyBridgeSignature } from "./bridge/signature.js";
 import type { BridgeReplayStore } from "./bridge/signature.js";
+import { sendBridgeCommand } from "./bridge/client.js";
+import type { BridgeConnection } from "./bridge/client.js";
 import { COMMERCE_COLLECTION_INDEXES } from "./storage/collections.js";
 import { createEmDashRepositories } from "./storage/repositories.js";
 import type { CommerceRepositories, EmDashCommerceStorage } from "./storage/repositories.js";
 
 const PLUGIN_ID = "emdash-commerce";
 const PLUGIN_VERSION = "0.1.0";
+const checkoutLocks = new Map<string, Promise<void>>();
 
 export interface CommercePaymentProvider {
-  createPayment(input: { order: OrderSnapshot }): Promise<{ checkoutUrl: string; paymentReference?: string }>;
+  createPayment(input: { order: OrderSnapshot; idempotencyKey: string }): Promise<{ checkoutUrl: string; paymentReference?: string }>;
 }
+export type CommercePaymentBridgeConfig = Omit<BridgeConnection, "fetcher">;
 export interface CommercePluginOptions {
   enabled?: boolean;
   bridgeSecrets?: Record<string, string>;
+  paymentBridges?: Record<string, CommercePaymentBridgeConfig>;
   paymentProviders?: Record<string, CommercePaymentProvider>;
 }
 export type CommercePluginDescriptorOptions = Omit<CommercePluginOptions, "paymentProviders">;
@@ -53,6 +58,40 @@ function requestBody(context: RouteContext): Record<string, unknown> {
     throw PluginRouteError.badRequest("Request body must be an object");
   }
   return body as Record<string, unknown>;
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input);
+}
+
+function paymentProviderFor(options: CommercePluginOptions, providerId: string): CommercePaymentProvider | undefined {
+  const direct = options.paymentProviders?.[providerId];
+  if (direct) {
+    return direct;
+  }
+  const connection = options.paymentBridges?.[providerId];
+  if (!connection) {
+    return undefined;
+  }
+  return {
+    async createPayment({ order, idempotencyKey }) {
+      const response = await sendBridgeCommand(connection, {
+        contract: "commerce.payment.create",
+        version: 1,
+        requestId: order.orderId,
+        idempotencyKey,
+        sentAt: new Date().toISOString(),
+        payload: { operation: "charge", order },
+      });
+      if (!response.ok || !isRecord(response.data) || typeof response.data.checkoutUrl !== "string") {
+        throw new Error("Payment bridge did not return a checkout URL");
+      }
+      return {
+        checkoutUrl: response.data.checkoutUrl,
+        ...(typeof response.data.paymentReference === "string" ? { paymentReference: response.data.paymentReference } : {}),
+      };
+    },
+  };
 }
 
 async function catalogRoute(context: RouteContext): Promise<unknown> {
@@ -130,7 +169,7 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
   if (typeof paymentProvider !== "string") {
     throw PluginRouteError.badRequest("paymentProvider is required");
   }
-  const provider = options.paymentProviders?.[paymentProvider];
+  const provider = paymentProviderFor(options, paymentProvider);
   if (!provider) {
     throw PluginRouteError.badRequest(`Payment provider ${paymentProvider} is not configured`);
   }
@@ -138,26 +177,35 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
   if (typeof cartId !== "string") {
     throw PluginRouteError.badRequest("cartId is required");
   }
-  const repositories = repositoriesFromContext(context);
-  const cart = await repositories.carts.get(cartId) as unknown as Cart | undefined;
-  if (!cart) {
-    throw PluginRouteError.notFound("Cart not found");
-  }
   const checkoutKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : cartId;
-  if (cart.status === "checked_out") {
-    if (cart.checkoutKey !== checkoutKey || !cart.checkoutResult) {
-      throw PluginRouteError.conflict("Cart has already been checked out");
+  const lockKey = `${cartId}:${checkoutKey}`;
+  const previous = checkoutLocks.get(lockKey);
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  checkoutLocks.set(lockKey, current);
+  await previous;
+  try {
+    const repositories = repositoriesFromContext(context);
+    const cart = await repositories.carts.get(cartId) as unknown as Cart | undefined;
+    if (!cart) {
+      throw PluginRouteError.notFound("Cart not found");
     }
-    return cart.checkoutResult;
-  }
-  if (cart.status === "checkout_pending" && cart.checkoutKey !== checkoutKey) {
-    throw PluginRouteError.conflict("Cart checkout is already in progress");
-  }
-  const checkoutOrderId = cart.checkoutOrderId ?? `${cartId}-${checkoutKey}`;
-  cart.status = "checkout_pending";
-  cart.checkoutKey = checkoutKey;
-  cart.checkoutOrderId = checkoutOrderId;
-  await repositories.carts.put(cartId, cart as never);
+    if (cart.status === "checked_out") {
+      if (cart.checkoutKey !== checkoutKey || !cart.checkoutResult) {
+        throw PluginRouteError.conflict("Cart has already been checked out");
+      }
+      return cart.checkoutResult;
+    }
+    if (cart.status === "checkout_pending" && cart.checkoutKey !== checkoutKey) {
+      throw PluginRouteError.conflict("Cart checkout is already in progress");
+    }
+    const checkoutOrderId = cart.checkoutOrderId ?? `${cartId}-${checkoutKey}`;
+    cart.status = "checkout_pending";
+    cart.checkoutKey = checkoutKey;
+    cart.checkoutOrderId = checkoutOrderId;
+    await repositories.carts.put(cartId, cart as never);
   let order;
   try {
     const lines = await Promise.all(cart.lines.map(async (line) => {
@@ -186,11 +234,15 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
       shippingAddress: body.shippingAddress === undefined ? undefined : parseAddressSnapshot(body.shippingAddress),
     });
   } catch (error) {
+    cart.status = "active";
+    cart.checkoutKey = undefined;
+    cart.checkoutOrderId = undefined;
+    await repositories.carts.put(cartId, cart as never);
     throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid checkout");
   }
   await repositories.orders.put(order.id, order);
   try {
-    const payment = await provider.createPayment({ order });
+    const payment = await provider.createPayment({ order, idempotencyKey: checkoutKey });
     const result = {
       orderId: order.id,
       checkoutUrl: payment.checkoutUrl,
@@ -204,6 +256,12 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     return result;
   } catch (error) {
     throw new PluginRouteError("PAYMENT_PROVIDER_ERROR", "Payment provider failed", 502);
+  }
+  } finally {
+    release();
+    if (checkoutLocks.get(lockKey) === current) {
+      checkoutLocks.delete(lockKey);
+    }
   }
 }
 
