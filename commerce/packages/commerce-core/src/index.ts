@@ -93,10 +93,13 @@ export {
 } from "./bridge/client.js";
 export {
   BRIDGE_REPLAY_WINDOW,
+  createMemoryReplayStore,
   signBridgePayload,
   verifyBridgeSignature,
+  type BridgeReplayStore,
 } from "./bridge/signature.js";
 export {
+  MAX_BRIDGE_DELIVERY_ATTEMPTS,
   createMemoryOutbox,
   recordEventDelivery,
   retryPendingDeliveries,

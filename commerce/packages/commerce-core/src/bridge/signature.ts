@@ -1,6 +1,29 @@
 const BRIDGE_REPLAY_WINDOW_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
 
+export interface BridgeReplayStore {
+  checkAndStore(key: string, expiresAt: number): Promise<boolean>;
+}
+
+export function createMemoryReplayStore(): BridgeReplayStore {
+  const entries = new Map<string, number>();
+  return {
+    async checkAndStore(key, expiresAt) {
+      const now = Date.now();
+      for (const [entryKey, entryExpiresAt] of entries) {
+        if (entryExpiresAt <= now) {
+          entries.delete(entryKey);
+        }
+      }
+      if (entries.has(key)) {
+        return false;
+      }
+      entries.set(key, expiresAt);
+      return true;
+    },
+  };
+}
+
 function timestampToMilliseconds(timestamp: string): number {
   const numeric = Number(timestamp);
   if (Number.isFinite(numeric)) {
@@ -43,6 +66,7 @@ export async function verifyBridgeSignature(
   body: string,
   signature: string,
   now: number = Date.now(),
+  replayStore?: BridgeReplayStore,
 ): Promise<void> {
   const timestampMs = timestampToMilliseconds(timestamp);
   if (Math.abs(now - timestampMs) > BRIDGE_REPLAY_WINDOW_MS) {
@@ -58,6 +82,9 @@ export async function verifyBridgeSignature(
   const valid = await crypto.subtle.verify("HMAC", key, signatureBytes as unknown as BufferSource, encoder.encode(`${timestamp}.${body}`));
   if (!valid) {
     throw new Error("Invalid bridge signature");
+  }
+  if (replayStore && !(await replayStore.checkAndStore(`${timestamp}.${signature}`, timestampMs + BRIDGE_REPLAY_WINDOW_MS))) {
+    throw new Error("Bridge request replayed");
   }
 }
 

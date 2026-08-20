@@ -19,16 +19,17 @@ function cloneConnection(connection: ProviderConnection): ProviderConnection {
   return { ...connection, capabilities: [...connection.capabilities] };
 }
 
+function validateConnection(connection: ProviderConnection): void {
+  if (connection.pluginId.length === 0 || connection.sharedSecret.length === 0) {
+    throw new Error("Invalid provider connection");
+  }
+}
+
 export function createProviderRegistry(initial: ProviderConnection[] = []): ProviderRegistry {
   const connections = new Map<string, ProviderConnection>();
-  for (const connection of initial) {
-    connections.set(connection.pluginId, cloneConnection(connection));
-  }
-  return {
+  const registry: ProviderRegistry = {
     register(connection) {
-      if (connection.pluginId.length === 0 || connection.sharedSecret.length === 0) {
-        throw new Error("Invalid provider connection");
-      }
+      validateConnection(connection);
       connections.set(connection.pluginId, cloneConnection(connection));
     },
     unregister(pluginId) {
@@ -49,4 +50,8 @@ export function createProviderRegistry(initial: ProviderConnection[] = []): Prov
       return [...connections.values()].map(cloneConnection);
     },
   };
+  for (const connection of initial) {
+    registry.register(connection);
+  }
+  return registry;
 }

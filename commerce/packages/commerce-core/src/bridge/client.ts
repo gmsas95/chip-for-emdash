@@ -32,9 +32,10 @@ export async function sendBridgeCommand<T>(
   connection: BridgeConnection,
   request: UnsignedBridgeRequest<T>,
 ): Promise<BridgeResponse<unknown>> {
-  const timestamp = String(Date.now());
+  const timestamp = new Date().toISOString();
   const unsignedRequest: BridgeRequest<T> = {
     ...request,
+    sentAt: timestamp,
     auth: {
       version: 1,
       keyId: connection.keyId ?? connection.pluginId,
@@ -55,6 +56,10 @@ export async function sendBridgeCommand<T>(
       },
       body: JSON.stringify(unsignedRequest),
     });
+    if (!response.ok) {
+      const retryable = response.status >= 500 || response.status === 429;
+      return errorResponse(request.requestId, `HTTP_${response.status}`, `Provider bridge returned HTTP ${response.status}`, retryable);
+    }
     let payload: unknown;
     try {
       payload = await response.json();
@@ -63,10 +68,6 @@ export async function sendBridgeCommand<T>(
     }
     if (!isRecord(payload) || payload.requestId !== request.requestId || typeof payload.ok !== "boolean") {
       return errorResponse(request.requestId, "INVALID_RESPONSE", "Provider returned an invalid bridge response", false);
-    }
-    if (!response.ok) {
-      const retryable = response.status >= 500 || response.status === 429;
-      return errorResponse(request.requestId, `HTTP_${response.status}`, `Provider bridge returned HTTP ${response.status}`, retryable);
     }
     if (payload.ok === false) {
       const providerError = isRecord(payload.error) ? payload.error : undefined;

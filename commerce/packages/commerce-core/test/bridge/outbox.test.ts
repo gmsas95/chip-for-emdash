@@ -19,4 +19,29 @@ describe("Commerce bridge outbox", () => {
     expect(summary).toMatchObject({ attempted: 1, retryable: 1 });
     expect((await outbox.get("d-2"))?.attempts).toBe(1);
   });
+
+  it("claims a delivery so overlapping maintenance runs invoke it once", async () => {
+    const outbox = createMemoryOutbox();
+    await outbox.record({ deliveryId: "d-3", event: "payment.paid", idempotencyKey: "idem-3" });
+    let calls = 0;
+    const deliver = async () => {
+      calls += 1;
+      return { ok: true, retryable: false };
+    };
+
+    await Promise.all([
+      retryPendingDeliveries(outbox, deliver, "2026-08-20T00:00:00.000Z"),
+      retryPendingDeliveries(outbox, deliver, "2026-08-20T00:00:00.000Z"),
+    ]);
+
+    expect(calls).toBe(1);
+  });
+
+  it("rejects conflicting idempotency metadata", async () => {
+    const outbox = createMemoryOutbox();
+    await outbox.record({ deliveryId: "d-4", event: "payment.paid", idempotencyKey: "idem-4", payloadHash: "hash-a" });
+
+    await expect(outbox.record({ deliveryId: "d-4", event: "shipment.created", idempotencyKey: "idem-4", payloadHash: "hash-b" }))
+      .rejects.toThrow("OUTBOX_IDEMPOTENCY_CONFLICT");
+  });
 });

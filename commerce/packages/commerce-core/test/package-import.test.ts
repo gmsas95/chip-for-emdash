@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_BRIDGE_DELIVERY_ATTEMPTS } from "@emdash-commerce/core";
 import { calculateTotals } from "@emdash-commerce/core/domain/totals";
 
 describe("Commerce core package exports", () => {
@@ -10,5 +11,6 @@ describe("Commerce core package exports", () => {
       taxMinor: 180,
       shippingMinor: 500,
     }).totalMinor).toBe(2480);
+    expect(MAX_BRIDGE_DELIVERY_ATTEMPTS).toBe(5);
   });
 });

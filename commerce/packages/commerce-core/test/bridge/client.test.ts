@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseBridgeRequest } from "@emdash-commerce/contracts";
 import { sendBridgeCommand } from "../../src/bridge/client.js";
 
 describe("sendBridgeCommand", () => {
@@ -25,6 +26,7 @@ describe("sendBridgeCommand", () => {
 
     expect(response).toEqual({ requestId: "req-1", ok: true, data: { checkoutUrl: "https://pay.test" } });
     expect(JSON.parse(requestBody).auth.signature).toEqual(expect.any(String));
+    expect(() => parseBridgeRequest(JSON.parse(requestBody))).not.toThrow();
   });
 
   it("marks authentication failures as non-retryable", async () => {
@@ -45,5 +47,25 @@ describe("sendBridgeCommand", () => {
     });
 
     expect(response.error).toMatchObject({ retryable: false });
+  });
+
+  it("keeps malformed transient HTTP failures retryable", async () => {
+    const response = await sendBridgeCommand({
+      pluginId: "chip",
+      basePath: "https://commerce.test/bridge",
+      eventPath: "https://commerce.test/bridge/events",
+      capabilities: ["payment.create"],
+      sharedSecret: "secret",
+      fetcher: async () => new Response("temporarily unavailable", { status: 503 }),
+    }, {
+      contract: "commerce.payment.create",
+      version: 1,
+      requestId: "req-3",
+      idempotencyKey: "idem-3",
+      sentAt: new Date().toISOString(),
+      payload: { operation: "charge", order: { orderId: "o-3", currency: "MYR", items: [], subtotal: { amountMinor: 0, currency: "MYR" }, total: { amountMinor: 0, currency: "MYR" } } },
+    });
+
+    expect(response.error).toMatchObject({ code: "HTTP_503", retryable: true });
   });
 });
