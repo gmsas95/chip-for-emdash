@@ -6,17 +6,29 @@ export interface AdminPageProps {
   apiBasePath?: string;
 }
 
-export function useCommerceData<T>(path: string, apiBasePath = "/_emdash/api/plugins/commerce"): { data: T | undefined; loading: boolean; error: string | undefined } {
+interface EmDashApiEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: { message?: string };
+}
+
+export function useCommerceData<T>(path: string, apiBasePath = "/_emdash/api/plugins/emdash-commerce"): { data: T | undefined; loading: boolean; error: string | undefined } {
   const [data, setData] = useState<T>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
     setLoading(true);
-    void fetch(`${apiBasePath}${path}`)
+    void fetch(`${apiBasePath}${path}`, {
+      credentials: "same-origin",
+      headers: { "X-EmDash-Request": "1" },
+    })
       .then(async (response) => {
-        if (!response.ok) throw new Error(`Commerce admin request failed (${response.status})`);
-        return response.json() as Promise<T>;
+        const envelope = await response.json() as EmDashApiEnvelope<T>;
+        if (!response.ok || envelope.success !== true) {
+          throw new Error(envelope.error?.message ?? `Commerce admin request failed (${response.status})`);
+        }
+        return envelope.data;
       })
       .then((value) => {
         if (active) setData(value);

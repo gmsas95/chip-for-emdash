@@ -1,13 +1,13 @@
 import { definePlugin } from "emdash";
 import type { PluginDescriptor, ResolvedPlugin, RouteContext } from "emdash";
-import { createOrderSnapshot } from "./domain/orders.js";
 import { addCartLine } from "./domain/cart.js";
-import { createEmDashRepositories } from "./storage/repositories.js";
-import type { CommerceRepositories, EmDashCommerceStorage } from "./storage/repositories.js";
 import type { Cart } from "./domain/cart.js";
+import { createOrderSnapshot } from "./domain/orders.js";
 import { createMemoryReplayStore, verifyBridgeSignature } from "./bridge/signature.js";
 import type { BridgeReplayStore } from "./bridge/signature.js";
 import { COMMERCE_COLLECTION_INDEXES } from "./storage/collections.js";
+import { createEmDashRepositories } from "./storage/repositories.js";
+import type { CommerceRepositories, EmDashCommerceStorage } from "./storage/repositories.js";
 
 const PLUGIN_ID = "emdash-commerce";
 const PLUGIN_VERSION = "0.1.0";
@@ -34,8 +34,14 @@ function repositoriesFromContext(context: RouteContext): CommerceRepositories {
   return createEmDashRepositories(context.storage as unknown as EmDashCommerceStorage);
 }
 
-async function requestBody(context: RouteContext): Promise<Record<string, unknown>> {
-  const body: unknown = await context.request.json();
+function requireMethod(context: RouteContext, method: string): void {
+  if (context.request.method !== method) {
+    throw new Error(`Method ${context.request.method} not allowed; expected ${method}`);
+  }
+}
+
+function requestBody(context: RouteContext): Record<string, unknown> {
+  const body: unknown = context.input;
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new Error("Request body must be an object");
   }
@@ -43,19 +49,23 @@ async function requestBody(context: RouteContext): Promise<Record<string, unknow
 }
 
 async function catalogRoute(context: RouteContext): Promise<unknown> {
-  return context.storage.products?.query({ limit: 50 });
+  requireMethod(context, "GET");
+  return context.storage.products?.query({ where: { status: "published" }, limit: 50 });
 }
 
 async function inventoryRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "GET");
   return context.storage.inventory?.query({ limit: 50 });
 }
 
 async function customersRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "GET");
   return context.storage.customers?.query({ limit: 50 });
 }
 
 async function cartRoute(context: RouteContext): Promise<unknown> {
-  const body = await requestBody(context);
+  requireMethod(context, "POST");
+  const body = requestBody(context);
   const repositories = repositoriesFromContext(context);
   const cartId = typeof body.cartId === "string" ? body.cartId : crypto.randomUUID();
   const existing = await repositories.carts.get(cartId) as unknown as Cart | undefined;
@@ -73,7 +83,8 @@ async function cartRoute(context: RouteContext): Promise<unknown> {
 }
 
 async function checkoutRoute(context: RouteContext): Promise<unknown> {
-  const body = await requestBody(context);
+  requireMethod(context, "POST");
+  const body = requestBody(context);
   const cartId = body.cartId;
   if (typeof cartId !== "string") {
     throw new Error("cartId is required");
@@ -87,6 +98,7 @@ async function checkoutRoute(context: RouteContext): Promise<unknown> {
     orderId: typeof body.orderId === "string" ? body.orderId : crypto.randomUUID(),
     currency: cart.currency,
     lines: cart.lines.map((line) => ({
+      lineId: line.lineId,
       productId: line.productId,
       name: line.name,
       quantity: line.quantity,
@@ -104,45 +116,50 @@ async function ordersRoute(context: RouteContext): Promise<unknown> {
   if (context.request.method === "GET") {
     return repositories.orders.query({ limit: 50 });
   }
-  const body = await requestBody(context);
+  requireMethod(context, "POST");
+  const body = requestBody(context);
   if (typeof body.orderId !== "string") {
     throw new Error("orderId is required");
   }
   return repositories.orders.get(body.orderId);
 }
+
 async function bridgeEventsRoute(
   options: CommercePluginOptions,
   replayStore: BridgeReplayStore,
   context: RouteContext,
 ): Promise<unknown> {
-  const deliveryId = context.request.headers.get("x-emdash-delivery-id");
+  requireMethod(context, "POST");
+  const deliveryIdHeader = context.request.headers.get("x-emdash-delivery-id");
   const providerId = context.request.headers.get("x-emdash-provider-id");
   const signature = context.request.headers.get("x-emdash-bridge-signature");
   const timestamp = context.request.headers.get("x-emdash-bridge-timestamp");
   const secret = providerId === null ? undefined : options.bridgeSecrets?.[providerId];
-  if (!deliveryId || !providerId || !signature || !timestamp || !secret) {
+  if (!providerId || !signature || !timestamp || !secret) {
     throw new Error("Missing bridge authentication metadata");
   }
-  const rawBody = await context.request.text();
-  await verifyBridgeSignature(secret, timestamp, rawBody, signature, Date.now(), replayStore);
-  const parsed: unknown = JSON.parse(rawBody);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("Bridge event body must be an object");
+  const body = requestBody(context);
+  const rawBody = JSON.stringify(body);
+  await verifyBridgeSignature(secret, timestamp, rawBody, signature);
+  const eventId = body.eventId;
+  const deliveryId = body.deliveryId;
+  if (body.version !== 1 || typeof eventId !== "string" || typeof deliveryId !== "string" || typeof body.event !== "string" || typeof body.occurredAt !== "string" || typeof body.correlationId !== "string" || !("payload" in body)) {
+    throw new Error("Invalid Commerce event envelope");
   }
-  const body = parsed as Record<string, unknown>;
   const repositories = repositoriesFromContext(context);
   const existing = await repositories.orderEvents.get(deliveryId);
   if (existing) {
     return { ok: true, duplicate: true, deliveryId };
   }
+  await verifyBridgeSignature(secret, timestamp, rawBody, signature, Date.now(), replayStore);
   await repositories.orderEvents.put(deliveryId, {
+    ...body,
     id: deliveryId,
     providerId,
-    event: typeof body.event === "string" ? body.event : "unknown",
     status: "received",
     receivedAt: new Date().toISOString(),
-  });
-  return { ok: true, duplicate: false, deliveryId };
+  } as never);
+  return { ok: true, duplicate: false, deliveryId, eventId };
 }
 
 export function commercePlugin(options: CommercePluginOptions = {}): PluginDescriptor<CommercePluginOptions> {
@@ -171,7 +188,7 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       cart: { public: true, handler: cartRoute },
       checkout: { public: true, handler: checkoutRoute },
       orders: { public: false, handler: ordersRoute },
-      "bridge/events": { public: false, handler: (context) => bridgeEventsRoute(options, replayStore, context) },
+      "bridge/events": { public: true, handler: (context) => bridgeEventsRoute(options, replayStore, context) },
     },
     admin: {
       entry: "@emdash-commerce/core/admin",

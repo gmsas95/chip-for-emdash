@@ -25,6 +25,6 @@ describe("Commerce native plugin", () => {
       "orders",
       "bridge/events",
     ]));
-    expect(plugin.routes["bridge/events"]?.public).toBe(false);
+    expect(plugin.routes["bridge/events"]?.public).toBe(true);
   });
 });
