@@ -25,7 +25,7 @@
  * signature verification without a settings migration.
  */
 
-import { createCommerceBridgeRoutes } from "./commerce-bridge.js";
+import { createCommerceBridgeRoutes, emitCommerceEvent } from "./commerce-bridge.js";
 import type { PluginContext, RouteHandler, SandboxedPlugin, SandboxedRouteContext } from "emdash/plugin";
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -405,6 +405,7 @@ async function updatePaymentStatus(
 		updatedAt: new Date().toISOString(),
 	};
 	await ctx.storage.payments!.put(entry.id, updated);
+	entry.data = updated;
 	ctx.log.info(`CHIP payment ${entry.data.reference} (${entry.data.purchaseId}) → ${status}`);
 }
 
@@ -644,7 +645,14 @@ const returnHandler: RouteHandler = async (routeCtx, ctx) => {
 	}
 
 	const status = normalizeStatus(getString(purchase, "status"));
-	if (status) await updatePaymentStatus(ctx, entry, status, paidOnOf(purchase));
+	if (status) {
+		await updatePaymentStatus(ctx, entry, status, paidOnOf(purchase));
+		try {
+			await emitCommerceEvent(ctx, await loadSettings(ctx), `commerce.payment.${status === "hold" ? "created" : status}`, entry.data);
+		} catch (error) {
+			ctx.log.error("Failed to emit Commerce payment event", error);
+		}
+	}
 
 	const redirectTo =
 		status === "paid"
@@ -695,8 +703,14 @@ const callbackHandler: RouteHandler = async (routeCtx, ctx) => {
 		}
 
 		const status = normalizeStatus(getString(verified.purchase, "status"));
-		if (status) await updatePaymentStatus(ctx, entry, status, paidOnOf(verified.purchase));
-		return { ok: true };
+		if (status) {
+			await updatePaymentStatus(ctx, entry, status, paidOnOf(verified.purchase));
+			try {
+				await emitCommerceEvent(ctx, await loadSettings(ctx), `commerce.payment.${status === "hold" ? "created" : status}`, entry.data);
+			} catch (error) {
+				ctx.log.error("Failed to emit Commerce payment event", error);
+			}
+		}
 	} catch (error) {
 		// Never fail a webhook response — CHIP retries non-2xx and storms the site.
 		ctx.log.error("CHIP webhook handling failed", error);
@@ -753,6 +767,8 @@ const settingsHandler: RouteHandler = async (_routeCtx, ctx) => {
 		settings: {
 			// The secret key itself is never returned — only whether it is set.
 			secretKeySet: !!settings.secretKey,
+			commerceBridgeSecretSet: !!settings.commerceBridgeSecret,
+			commerceEventUrl: settings.commerceEventUrl,
 			brandId: settings.brandId,
 			publicKey: settings.publicKey,
 			successUrl: settings.successUrl,
@@ -771,7 +787,10 @@ const settingsSaveHandler: RouteHandler = async (routeCtx, ctx) => {
 		if (typeof input.secretKey === "string" && input.secretKey !== "") {
 			await ctx.kv.set(SETTINGS_KEYS.secretKey, input.secretKey);
 		}
-		for (const key of ["brandId", "publicKey", "successUrl", "failureUrl", "cancelUrl"] as const) {
+		if (typeof input.commerceBridgeSecret === "string" && input.commerceBridgeSecret !== "") {
+			await ctx.kv.set(SETTINGS_KEYS.commerceBridgeSecret, input.commerceBridgeSecret);
+		}
+		for (const key of ["brandId", "publicKey", "successUrl", "failureUrl", "cancelUrl", "commerceEventUrl"] as const) {
 			if (typeof input[key] === "string") await ctx.kv.set(SETTINGS_KEYS[key], input[key]);
 		}
 		return { ok: true };

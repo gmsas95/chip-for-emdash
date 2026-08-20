@@ -53,7 +53,7 @@ describe("CHIP Commerce payment routes", () => {
   it("rejects an unsigned Commerce payment request", async () => {
     const route = chipPlugin.routes["commerce/payment/create"];
     const ctx = baseContext();
-    const result = await route.handler(context({ contract: "commerce.payment.create" }, ctx), ctx as never);
+    const result = await route.handler(context({ contract: "commerce.payment.create", requestId: "r-unsigned", idempotencyKey: "idem", version: 1, sentAt: new Date().toISOString(), payload: {} }, ctx), ctx as never);
 
     expect(result).toMatchObject({ ok: false, error: { code: "BRIDGE_AUTH_FAILED", retryable: false } });
   });
