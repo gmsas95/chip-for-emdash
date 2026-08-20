@@ -21,7 +21,7 @@
 	"allowedHosts": ["gate.chip-in.asia"],
 
 	"storage": {
-		"payments": { "indexes": ["status", "reference", "purchaseId", "returnToken", "createdAt"] }
+		"payments": { "indexes": ["status", "reference", "purchaseId", "returnToken", "createdAt", "commerceOrderId", "commercePaymentId", "idempotencyKey"] }
 	},
 
 	"admin": {

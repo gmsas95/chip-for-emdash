@@ -116,6 +116,30 @@ portal (Portal → Developer → Webhooks):
 Each webhook is answered with HTTP 200 immediately and re-verified against the CHIP API
 before the payment record is updated.
 
+## Commerce integration (optional)
+
+The CHIP plugin can act as a payment extension for the separate EmDash Commerce Core repository. Commerce remains the owner of carts, orders, inventory, and authoritative totals; this plugin owns CHIP credentials, purchases, callbacks, reconciliation, and provider-specific records.
+
+Install the published Commerce Contracts package alongside the plugin when it becomes available:
+
+```sh
+npm install @emdash-commerce/contracts
+```
+
+Configure the following server-side plugin settings:
+
+- `settings:commerceBridgeSecret` — shared HMAC secret used for versioned Commerce commands.
+- `settings:commerceEventUrl` — Commerce `POST /bridge/events` endpoint.
+
+Commerce payment command routes:
+
+| Route | Purpose |
+|---|---|
+| `commerce/payment/create` | Create an idempotent hosted payment from a signed Commerce order |
+| `commerce/payment/status` | Reconcile a payment against the provider API and return normalized state |
+| `commerce/payment/refund` | Record a merchant refund request for provider reconciliation |
+
+The adapter emits normalized `commerce.payment.*` events with stable delivery IDs and preserves provider-specific data only in the CHIP plugin.
 ## How it works
 
 | Route | Public | Method | Purpose |
