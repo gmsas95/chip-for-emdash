@@ -86,3 +86,30 @@ export {
   type OrderStatus,
   type PaymentStatus,
 } from "./domain/order-state.js";
+export {
+  sendBridgeCommand,
+  type BridgeConnection,
+  type UnsignedBridgeRequest,
+} from "./bridge/client.js";
+export {
+  BRIDGE_REPLAY_WINDOW,
+  signBridgePayload,
+  verifyBridgeSignature,
+} from "./bridge/signature.js";
+export {
+  createMemoryOutbox,
+  recordEventDelivery,
+  retryPendingDeliveries,
+  type BridgeOutbox,
+  type DeliveryAttemptResult,
+  type DeliveryStatus,
+  type EventDelivery,
+  type EventDeliveryInput,
+  type RetrySummary,
+} from "./bridge/outbox.js";
+export { runBridgeMaintenance, type BridgeMaintenanceDependencies } from "./bridge/scheduler.js";
+export {
+  createProviderRegistry,
+  type ProviderConnection,
+  type ProviderRegistry,
+} from "./bridge/provider-registry.js";
