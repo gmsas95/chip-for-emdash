@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { PaymentCommand } from "@emdash-commerce/contracts";
 import { createOrderSnapshot } from "../../src/domain/orders.js";
-
 describe("createOrderSnapshot", () => {
   it("captures the historical line-item price", () => {
     const order = createOrderSnapshot({
@@ -19,6 +19,20 @@ describe("createOrderSnapshot", () => {
       currency: "MYR",
     });
     expect(order.totalMinor).toBe(1000);
+  });
+
+  it("can be passed to the shared payment bridge contract", () => {
+    const order = createOrderSnapshot({
+      orderId: "o-bridge",
+      currency: "MYR",
+      productId: "p-1",
+      quantity: 1,
+      priceMinor: 1000,
+    });
+
+    const command: PaymentCommand = { operation: "charge", order };
+
+    expect(command.order.orderId).toBe("o-bridge");
   });
 
   it("deeply freezes copied order details and totals", () => {

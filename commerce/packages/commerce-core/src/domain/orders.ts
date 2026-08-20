@@ -1,4 +1,4 @@
-import type { AddressSnapshot, CustomerSnapshot, Money, OrderItem } from "@emdash-commerce/contracts";
+import type { AddressSnapshot, CustomerSnapshot, Money, OrderItem, OrderSnapshot as ContractOrderSnapshot } from "@emdash-commerce/contracts";
 import { calculateTotals } from "./totals.js";
 
 export interface OrderSnapshotLine {
@@ -14,25 +14,15 @@ export interface OrderSnapshotLine {
   readonly sku?: string;
 }
 
-export interface OrderSnapshot {
-  [key: string]: unknown;
+export interface OrderSnapshot extends ContractOrderSnapshot {
   readonly id: string;
-  readonly orderId: string;
-  readonly currency: string;
   readonly lines: readonly OrderSnapshotLine[];
-  readonly items: readonly Readonly<OrderItem>[];
   readonly subtotalMinor: number;
   readonly discountMinor: number;
   readonly taxMinor: number;
   readonly shippingMinor: number;
   readonly totalMinor: number;
-  readonly subtotal: Money;
-  readonly total: Money;
   readonly customerId?: string;
-  readonly customer?: Readonly<CustomerSnapshot>;
-  readonly billingAddress?: Readonly<AddressSnapshot>;
-  readonly shippingAddress?: Readonly<AddressSnapshot>;
-  readonly metadata?: Readonly<Record<string, string>>;
   readonly paymentProviderId?: string;
   readonly fulfillmentProviderId?: string;
   readonly status?: string;
@@ -159,7 +149,7 @@ export function createOrderSnapshot(input: CreateOrderSnapshotInput): OrderSnaps
     } satisfies OrderSnapshotLine;
   });
 
-  const items: Readonly<OrderItem>[] = lines.map((line) => ({
+  const items: OrderItem[] = lines.map((line) => ({
     lineId: line.lineId,
     name: line.name,
     quantity: line.quantity,
