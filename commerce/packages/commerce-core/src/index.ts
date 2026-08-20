@@ -129,7 +129,7 @@ export {
   type CommerceFetcher,
 } from "./storefront/client.js";
 export type {
-  CartCreateInput,
+  CartResultLine,
   CartLineInput,
   CartResult,
   CatalogResult,

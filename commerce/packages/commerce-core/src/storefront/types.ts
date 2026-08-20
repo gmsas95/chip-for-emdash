@@ -5,11 +5,22 @@ export interface CatalogResult<T = unknown> {
   hasMore?: boolean;
 }
 
+export interface CartResultLine {
+  lineId: string;
+  productId: string;
+  variantId?: string;
+  sku?: string;
+  name?: string;
+  unitAmountMinor: number;
+  quantity: number;
+  currency: string;
+  totalMinor?: number;
+}
+
 export interface CartResult {
   id: string;
   currency: string;
-  lines: unknown[];
-  [key: string]: unknown;
+  lines: CartResultLine[];
 }
 
 export interface CartCreateInput {
@@ -33,10 +44,11 @@ export interface CheckoutStartInput {
 }
 
 export interface CheckoutResult {
+  orderId: string;
   checkoutUrl: string;
+  paymentReference?: string;
   totalMinor: number;
   currency: string;
-  [key: string]: unknown;
 }
 
 export interface CommerceClient {

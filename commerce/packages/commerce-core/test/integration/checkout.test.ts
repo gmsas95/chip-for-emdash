@@ -18,14 +18,14 @@ describe("Commerce checkout integration", () => {
           taxMinor: 180,
           shippingMinor: 500,
         });
-        return new Response(JSON.stringify({ success: true, data: { checkoutUrl: "https://gate.chip-in.asia/checkout/test", totalMinor: totals.totalMinor, currency: totals.currency } }), { status: 200 });
+        return new Response(JSON.stringify({ success: true, data: { orderId: "order-1", checkoutUrl: "https://gate.chip-in.asia/checkout/test", totalMinor: totals.totalMinor, currency: totals.currency } }), { status: 200 });
       }
       return new Response(JSON.stringify({ success: true, data: {} }), { status: 200 });
     }, "/_emdash/api/plugins/emdash-commerce");
 
     const result = await client.checkout.start({ cartId: "cart-1", paymentProvider: "chip" });
 
-    expect(result).toEqual({ checkoutUrl: "https://gate.chip-in.asia/checkout/test", totalMinor: 2480, currency: "MYR" });
+    expect(result).toEqual({ orderId: "order-1", checkoutUrl: "https://gate.chip-in.asia/checkout/test", totalMinor: 2480, currency: "MYR" });
     expect(requests[0]?.body).not.toHaveProperty("totalMinor");
   });
 
