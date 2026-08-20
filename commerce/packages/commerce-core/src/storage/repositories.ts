@@ -131,16 +131,32 @@ function matchesWhereValue(actual: unknown, expected: WhereValue): boolean {
   if (expected === null || typeof expected !== "object") {
     return (actual ?? null) === expected;
   }
+  if (!isRecord(expected)) {
+    throw new StorageQueryError("Invalid storage where filter");
+  }
   if ("in" in expected) {
+    if (!Array.isArray(expected.in)) {
+      throw new StorageQueryError("Invalid storage in filter");
+    }
     return expected.in.includes(actual as string | number);
   }
   if ("startsWith" in expected) {
+    if (typeof expected.startsWith !== "string") {
+      throw new StorageQueryError("Invalid storage startsWith filter");
+    }
     return typeof actual === "string" && actual.startsWith(expected.startsWith);
   }
-  if (!isRecord(expected)) {
+  const operators = Object.keys(expected);
+  if (operators.length === 0 || operators.some((operator) => !["gt", "gte", "lt", "lte"].includes(operator))) {
+    throw new StorageQueryError("Invalid storage range filter");
+  }
+  if (actual === undefined || actual === null || (typeof actual !== "string" && typeof actual !== "number")) {
     return false;
   }
   for (const [operator, bound] of Object.entries(expected)) {
+    if (typeof bound !== "string" && typeof bound !== "number") {
+      throw new StorageQueryError("Invalid storage range bound");
+    }
     const comparison = compareValues(actual, bound);
     if (operator === "gt" && comparison <= 0) return false;
     if (operator === "gte" && comparison < 0) return false;
@@ -158,10 +174,14 @@ function matchesWhere(document: object, where: QueryWhere | undefined): boolean 
   return Object.entries(where ?? {}).every(([field, expected]) => matchesWhereValue(fieldValue(document, field), expected));
 }
 
-interface Cursor {
+interface CursorPart {
   field: string;
   direction: "asc" | "desc";
   value: string | number | undefined;
+}
+
+interface Cursor {
+  order: CursorPart[];
   id: string;
 }
 
@@ -179,18 +199,24 @@ function encodeCursor(cursor: Cursor): string {
   return encodeURIComponent(JSON.stringify(cursor));
 }
 
-function decodeCursor(value: string, field: string, direction: "asc" | "desc"): Cursor {
+function decodeCursor(value: string, orderEntries: Array<[string, "asc" | "desc"]>): Cursor {
   try {
-    const decoded = JSON.parse(decodeURIComponent(value)) as Partial<Cursor>;
-    if (
-      decoded.field !== field ||
-      decoded.direction !== direction ||
-      typeof decoded.id !== "string" ||
-      (decoded.value !== undefined && typeof decoded.value !== "string" && typeof decoded.value !== "number")
-    ) {
+    const decoded = JSON.parse(decodeURIComponent(value)) as { order?: unknown; id?: unknown };
+    if (!Array.isArray(decoded.order) || typeof decoded.id !== "string" || decoded.order.length !== orderEntries.length) {
       throw new Error("invalid cursor");
     }
-    return decoded as Cursor;
+    const order = decoded.order.map((part, index) => {
+      const expected = orderEntries[index];
+      if (!expected || !isRecord(part) || part.field !== expected[0] || part.direction !== expected[1]) {
+        throw new Error("invalid cursor");
+      }
+      return {
+        field: expected[0],
+        direction: expected[1],
+        value: orderValue(part.value),
+      };
+    });
+    return { order, id: decoded.id };
   } catch {
     throw new StorageQueryError("Invalid storage cursor");
   }
@@ -230,13 +256,11 @@ function createMemoryRepository<T extends object>(indexes: readonly string[]): D
     async query(options = {}) {
       assertIndexed(options, indexes);
       const limit = normalizeLimit(options.limit);
-      const orderEntries = Object.entries(options.orderBy ?? { createdAt: "asc" as const });
-      const [primaryOrder] = orderEntries;
-      if (!primaryOrder) {
+      const orderEntries = Object.entries(options.orderBy ?? { createdAt: "asc" as const }) as Array<[string, "asc" | "desc"]>;
+      if (orderEntries.length === 0) {
         throw new StorageQueryError("Storage query requires an order field");
       }
-      const [orderField, direction] = primaryOrder;
-      const cursor = options.cursor === undefined ? undefined : decodeCursor(options.cursor, orderField, direction);
+      const cursor = options.cursor === undefined ? undefined : decodeCursor(options.cursor, orderEntries);
       let items = [...documents.entries()]
         .filter(([, document]) => matchesWhere(document, options.where))
         .map(([id, document]) => ({ id, data: cloneDocument(document) }));
@@ -252,11 +276,17 @@ function createMemoryRepository<T extends object>(indexes: readonly string[]): D
 
       if (cursor) {
         items = items.filter((item) => {
-          const valueComparison = compareValues(fieldValue(item.data, orderField), cursor.value);
-          if (valueComparison === 0) {
-            return item.id > cursor.id;
+          for (const [index, [field, direction]] of orderEntries.entries()) {
+            const part = cursor.order[index];
+            if (!part) {
+              throw new StorageQueryError("Invalid storage cursor");
+            }
+            const comparison = compareValues(fieldValue(item.data, field), part.value);
+            if (comparison !== 0) {
+              return direction === "desc" ? comparison < 0 : comparison > 0;
+            }
           }
-          return direction === "desc" ? valueComparison < 0 : valueComparison > 0;
+          return item.id > cursor.id;
         });
       }
 
@@ -267,7 +297,14 @@ function createMemoryRepository<T extends object>(indexes: readonly string[]): D
         items: page,
         hasMore,
         ...(hasMore && last ? {
-          cursor: encodeCursor({ field: orderField, direction, value: orderValue(fieldValue(last.data, orderField)), id: last.id }),
+          cursor: encodeCursor({
+            order: orderEntries.map(([field, direction]) => ({
+              field,
+              direction,
+              value: orderValue(fieldValue(last.data, field)),
+            })),
+            id: last.id,
+          }),
         } : {}),
       };
     },
@@ -282,6 +319,33 @@ function createMemoryRepository<T extends object>(indexes: readonly string[]): D
       return count;
     },
   };
+}
+
+async function collectEmDashDocuments<T extends object>(
+  collection: EmDashStorageCollection<T>,
+  options: QueryOptions,
+): Promise<Array<{ id: string; data: T }>> {
+  const requestOptions = { ...options, limit: MAX_LIMIT };
+  delete requestOptions.cursor;
+  const documents: Array<{ id: string; data: T }> = [];
+  let cursor: string | undefined;
+  do {
+    const result = await collection.query({
+      ...requestOptions,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    for (const { id, data } of result.items) {
+      documents.push({ id, data: cloneDocument(data) });
+    }
+    if (!result.hasMore) {
+      break;
+    }
+    if (result.cursor === undefined || result.cursor === cursor) {
+      throw new StorageQueryError("EmDash storage returned a non-advancing cursor");
+    }
+    cursor = result.cursor;
+  } while (true);
+  return documents;
 }
 
 function adaptEmDashCollection<T extends object>(
@@ -304,15 +368,13 @@ function adaptEmDashCollection<T extends object>(
     },
     async query(options = {}) {
       assertIndexed(options, indexes);
-      const result = await collection.query(options);
-      return {
-        items: result.items.map(({ id, data }) => ({
-          id,
-          data: cloneDocument(data),
-        })),
-        ...(result.cursor === undefined ? {} : { cursor: result.cursor }),
-        hasMore: result.hasMore,
-      };
+      normalizeLimit(options.limit);
+      const documents = await collectEmDashDocuments(collection, options);
+      const memory = createMemoryRepository<T>(indexes);
+      for (const { id, data } of documents) {
+        await memory.put(id, data);
+      }
+      return memory.query(options);
     },
     async count(where) {
       assertIndexed({ where }, indexes);

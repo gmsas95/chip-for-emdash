@@ -1,6 +1,6 @@
 export type JsonPrimitive = null | boolean | number | string;
-export type JsonValue = JsonPrimitive | ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue | undefined };
-export type JsonDocument = { readonly [key: string]: JsonValue | undefined };
+export type JsonValue = JsonPrimitive | ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue };
+export type JsonDocument = { readonly [key: string]: JsonValue };
 
 function isPlainObject(value: object): value is Record<string, unknown> {
   const prototype = Object.getPrototypeOf(value);
