@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createCommerceClient } from "../../src/storefront/client.js";
 import { calculateTotals } from "../../src/domain/totals.js";
+import { createPlugin } from "../../src/index.js";
+import { createCommerceClient } from "../../src/storefront/client.js";
+import { createMemoryRepositories } from "../../src/storage/repositories.js";
 
 describe("Commerce checkout integration", () => {
   it("starts checkout from server-calculated totals without trusting browser totals", async () => {
@@ -25,5 +27,37 @@ describe("Commerce checkout integration", () => {
 
     expect(result).toEqual({ checkoutUrl: "https://gate.chip-in.asia/checkout/test", totalMinor: 2480, currency: "MYR" });
     expect(requests[0]?.body).not.toHaveProperty("totalMinor");
+  });
+
+  it("runs the native checkout route with a fake payment provider and catalog pricing", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 1000, currency: "MYR" });
+    const storage = Object.fromEntries(Object.entries(repositories).map(([name, repository]) => [name, {
+      get: async (id: string) => (await repository.get(id)) ?? null,
+      put: (id: string, data: never) => repository.put(id, data),
+      delete: async (id: string) => {
+        await repository.delete(id);
+        return true;
+      },
+      query: (options?: never) => repository.query(options),
+      count: (where?: never) => repository.count(where),
+    }]));
+    const plugin = createPlugin({
+      paymentProviders: {
+        chip: {
+          createPayment: async ({ order }) => ({
+            checkoutUrl: `https://gate.chip-in.asia/checkout/${order.orderId}`,
+          }),
+        },
+      },
+    });
+    const request = (method: string) => new Request("https://commerce.test", { method });
+    const context = (input: unknown, method: string) => ({ input, request: request(method), storage, requestMeta: {} }) as never;
+
+    const cart = await plugin.routes.cart.handler(context({ line: { productId: "p-1", quantity: 2 } }, "POST")) as { id: string };
+    const result = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "chip" }, "POST")) as { checkoutUrl: string; totalMinor: number };
+
+    expect(result.totalMinor).toBe(2000);
+    expect(result.checkoutUrl).toMatch(/^https:\/\/gate\.chip-in\.asia\/checkout\//);
   });
 });

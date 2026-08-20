@@ -1,3 +1,4 @@
+import type { OrderSnapshot } from "../domain/orders.js";
 import type {
   CartCreateInput,
   CartLineInput,
@@ -28,23 +29,36 @@ interface ApiEnvelope<T> {
   error?: { code?: string; message?: string; details?: unknown };
 }
 
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input);
+}
+
 export function createCommerceClient(
   fetcher: CommerceFetcher = fetch,
   basePath = "/_emdash/api/plugins/emdash-commerce",
 ): CommerceClient {
+  const normalizedBasePath = basePath.replace(/\/+$/, "");
+
   async function request<T>(path: string, method: "GET" | "POST", body?: unknown): Promise<T> {
-    const response = await fetcher(`${basePath}${path}`, {
+    const response = await fetcher(`${normalizedBasePath}${path}`, {
       method,
       credentials: "same-origin",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "X-EmDash-Request": "1",
+      },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    let envelope: ApiEnvelope<T>;
+    let parsed: unknown;
     try {
-      envelope = await response.json() as ApiEnvelope<T>;
+      parsed = await response.json();
     } catch {
       throw new CommerceApiError("Commerce returned invalid JSON", "INVALID_RESPONSE", response.status);
     }
+    if (!isRecord(parsed) || typeof parsed.success !== "boolean") {
+      throw new CommerceApiError("Commerce returned an invalid response envelope", "INVALID_RESPONSE", response.status);
+    }
+    const envelope = parsed as unknown as ApiEnvelope<T>;
     if (!response.ok || envelope.success !== true) {
       throw new CommerceApiError(
         envelope.error?.message ?? `Commerce request failed (${response.status})`,
@@ -71,7 +85,7 @@ export function createCommerceClient(
       start: (input: CheckoutStartInput) => request<CheckoutResult>("/checkout", "POST", input),
     },
     orders: {
-      get: (orderId: string) => request<unknown>("/orders", "POST", { orderId }),
+      get: (orderId: string) => request<OrderSnapshot | undefined>("/orders", "POST", { orderId }),
     },
   };
 }

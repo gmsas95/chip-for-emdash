@@ -1,10 +1,11 @@
 import { definePlugin, PluginRouteError } from "emdash";
 import type { PluginDescriptor, ResolvedPlugin, RouteContext } from "emdash";
-import { getCommerceEventSigningData } from "@emdash-commerce/contracts";
+import { getCommerceEventSigningData, parseAddressSnapshot } from "@emdash-commerce/contracts";
 import type { CommerceEvent } from "@emdash-commerce/contracts";
 import { addCartLine } from "./domain/cart.js";
 import type { Cart } from "./domain/cart.js";
 import { createOrderSnapshot } from "./domain/orders.js";
+import type { OrderSnapshot } from "./domain/orders.js";
 import { createMemoryReplayStore, verifyBridgeSignature } from "./bridge/signature.js";
 import type { BridgeReplayStore } from "./bridge/signature.js";
 import { COMMERCE_COLLECTION_INDEXES } from "./storage/collections.js";
@@ -14,9 +15,13 @@ import type { CommerceRepositories, EmDashCommerceStorage } from "./storage/repo
 const PLUGIN_ID = "emdash-commerce";
 const PLUGIN_VERSION = "0.1.0";
 
+export interface CommercePaymentProvider {
+  createPayment(input: { order: OrderSnapshot }): Promise<{ checkoutUrl: string; paymentReference?: string }>;
+}
 export interface CommercePluginOptions {
   enabled?: boolean;
   bridgeSecrets?: Record<string, string>;
+  paymentProviders?: Record<string, CommercePaymentProvider>;
 }
 
 const ADMIN_PAGES = [
@@ -78,8 +83,35 @@ async function cartRoute(context: RouteContext): Promise<unknown> {
     status: "active",
   };
   if (body.line !== undefined) {
+    if (typeof body.line !== "object" || body.line === null || Array.isArray(body.line)) {
+      throw PluginRouteError.badRequest("Invalid cart line");
+    }
+    const lineInput = body.line as Record<string, unknown>;
+    const productId = lineInput.productId;
+    const quantity = lineInput.quantity;
+    if (typeof productId !== "string" || typeof quantity !== "number") {
+      throw PluginRouteError.badRequest("Cart line requires productId and quantity");
+    }
+    const product = await repositories.products.get(productId) as unknown as Record<string, unknown> | undefined;
+    if (!product || product.status !== "published") {
+      throw PluginRouteError.notFound("Product not found");
+    }
+    if (typeof product.priceMinor !== "number" || typeof product.currency !== "string") {
+      throw PluginRouteError.badRequest("Product price is invalid");
+    }
+    if (cart.lines.length === 0) {
+      cart.currency = product.currency;
+    }
     try {
-      cart = addCartLine(cart, body.line as never);
+      cart = addCartLine(cart, {
+        productId,
+        variantId: typeof lineInput.variantId === "string" ? lineInput.variantId : undefined,
+        sku: typeof product.sku === "string" ? product.sku : undefined,
+        name: typeof product.name === "string" ? product.name : undefined,
+        unitAmountMinor: product.priceMinor,
+        quantity,
+        currency: product.currency,
+      });
     } catch (error) {
       throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid cart line");
     }
@@ -88,9 +120,20 @@ async function cartRoute(context: RouteContext): Promise<unknown> {
   return cart;
 }
 
-async function checkoutRoute(context: RouteContext): Promise<unknown> {
+async function checkoutRoute(options: CommercePluginOptions, context: RouteContext): Promise<unknown> {
   requireMethod(context, "POST");
   const body = requestBody(context);
+  if ("totalMinor" in body) {
+    throw PluginRouteError.badRequest("Client totals are not accepted");
+  }
+  const paymentProvider = body.paymentProvider;
+  if (typeof paymentProvider !== "string") {
+    throw PluginRouteError.badRequest("paymentProvider is required");
+  }
+  const provider = options.paymentProviders?.[paymentProvider];
+  if (!provider) {
+    throw PluginRouteError.badRequest(`Payment provider ${paymentProvider} is not configured`);
+  }
   const cartId = body.cartId;
   if (typeof cartId !== "string") {
     throw PluginRouteError.badRequest("cartId is required");
@@ -114,12 +157,24 @@ async function checkoutRoute(context: RouteContext): Promise<unknown> {
         currency: line.currency,
         sku: line.sku,
       })),
+      shippingAddress: body.shippingAddress === undefined ? undefined : parseAddressSnapshot(body.shippingAddress),
     });
   } catch (error) {
     throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid checkout");
   }
   await repositories.orders.put(order.id, order);
-  return order;
+  try {
+    const payment = await provider.createPayment({ order });
+    return {
+      orderId: order.id,
+      checkoutUrl: payment.checkoutUrl,
+      ...(payment.paymentReference === undefined ? {} : { paymentReference: payment.paymentReference }),
+      totalMinor: order.totalMinor,
+      currency: order.currency,
+    };
+  } catch (error) {
+    throw new PluginRouteError("PAYMENT_PROVIDER_ERROR", error instanceof Error ? error.message : "Payment provider failed", 502);
+  }
 }
 
 async function ordersRoute(context: RouteContext): Promise<unknown> {
@@ -205,7 +260,7 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       inventory: { public: false, handler: inventoryRoute },
       customers: { public: false, handler: customersRoute },
       cart: { public: true, handler: cartRoute },
-      checkout: { public: true, handler: checkoutRoute },
+      checkout: { public: true, handler: (context) => checkoutRoute(options, context) },
       orders: { public: false, handler: ordersRoute },
       "bridge/events": { public: true, handler: (context) => bridgeEventsRoute(options, replayStore, context) },
     },

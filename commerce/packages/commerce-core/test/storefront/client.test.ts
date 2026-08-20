@@ -19,6 +19,6 @@ describe("createCommerceClient", () => {
   it("preserves typed API errors", async () => {
     const client = createCommerceClient(async () => new Response(JSON.stringify({ success: false, error: { code: "INSUFFICIENT_STOCK", message: "No stock" } }), { status: 409 }), "/api");
 
-    await expect(client.checkout.start({ cartId: "cart-1", paymentProvider: "chip" })).rejects.toBeInstanceOf(CommerceApiError);
+    await expect(client.checkout.start({ cartId: "cart-1", paymentProvider: "chip" })).rejects.toMatchObject({ code: "INSUFFICIENT_STOCK", status: 409 });
   });
 });

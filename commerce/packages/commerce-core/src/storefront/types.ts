@@ -1,3 +1,4 @@
+import type { OrderSnapshot } from "../domain/orders.js";
 export interface CatalogResult<T = unknown> {
   items: T[];
   cursor?: string;
@@ -21,11 +22,7 @@ export interface CartLineInput {
   line: {
     productId: string;
     variantId?: string;
-    sku?: string;
-    name?: string;
-    unitAmountMinor: number;
     quantity: number;
-    currency?: string;
   };
 }
 
@@ -54,6 +51,6 @@ export interface CommerceClient {
     start(input: CheckoutStartInput): Promise<CheckoutResult>;
   };
   orders: {
-    get(orderId: string): Promise<unknown>;
+    get(orderId: string): Promise<OrderSnapshot | undefined>;
   };
 }
