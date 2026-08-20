@@ -45,7 +45,7 @@ function requireMethod(context: RouteContext, method: string): void {
 function requestBody(context: RouteContext): Record<string, unknown> {
   const body: unknown = context.input;
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    throw new Error("Request body must be an object");
+    throw PluginRouteError.badRequest("Request body must be an object");
   }
   return body as Record<string, unknown>;
 }
@@ -78,7 +78,11 @@ async function cartRoute(context: RouteContext): Promise<unknown> {
     status: "active",
   };
   if (body.line !== undefined) {
-    cart = addCartLine(cart, body.line as never);
+    try {
+      cart = addCartLine(cart, body.line as never);
+    } catch (error) {
+      throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid cart line");
+    }
   }
   await repositories.carts.put(cartId, cart as never);
   return cart;
@@ -89,26 +93,31 @@ async function checkoutRoute(context: RouteContext): Promise<unknown> {
   const body = requestBody(context);
   const cartId = body.cartId;
   if (typeof cartId !== "string") {
-    throw new Error("cartId is required");
+    throw PluginRouteError.badRequest("cartId is required");
   }
   const repositories = repositoriesFromContext(context);
   const cart = await repositories.carts.get(cartId) as unknown as Cart | undefined;
   if (!cart) {
-    throw new Error("Cart not found");
+    throw PluginRouteError.notFound("Cart not found");
   }
-  const order = createOrderSnapshot({
-    orderId: typeof body.orderId === "string" ? body.orderId : crypto.randomUUID(),
-    currency: cart.currency,
-    lines: cart.lines.map((line) => ({
-      lineId: line.lineId,
-      productId: line.productId,
-      name: line.name,
-      quantity: line.quantity,
-      unitAmountMinor: line.unitAmountMinor,
-      currency: line.currency,
-      sku: line.sku,
-    })),
-  });
+  let order;
+  try {
+    order = createOrderSnapshot({
+      orderId: typeof body.orderId === "string" ? body.orderId : crypto.randomUUID(),
+      currency: cart.currency,
+      lines: cart.lines.map((line) => ({
+        lineId: line.lineId,
+        productId: line.productId,
+        name: line.name,
+        quantity: line.quantity,
+        unitAmountMinor: line.unitAmountMinor,
+        currency: line.currency,
+        sku: line.sku,
+      })),
+    });
+  } catch (error) {
+    throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid checkout");
+  }
   await repositories.orders.put(order.id, order);
   return order;
 }
@@ -121,7 +130,7 @@ async function ordersRoute(context: RouteContext): Promise<unknown> {
   requireMethod(context, "POST");
   const body = requestBody(context);
   if (typeof body.orderId !== "string") {
-    throw new Error("orderId is required");
+    throw PluginRouteError.badRequest("orderId is required");
   }
   return repositories.orders.get(body.orderId);
 }
