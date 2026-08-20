@@ -173,17 +173,31 @@ describe("Commerce contracts", () => {
       now: NOW,
       payloadParser: () => ({ unrelated: true }),
     });
+
+    const unrelatedValidator: (input: unknown) => { unrelated: true } = () => ({ unrelated: true });
+    // @ts-expect-error Built-in contracts cannot be relabeled through an explicitly typed validator.
+    parseBridgeRequest<typeof unrelatedValidator>(validBridgeRequest, {
+      now: NOW,
+      payloadParser: unrelatedValidator,
+    });
   });
 
   it("returns the exact value and type produced by an explicit custom validator", () => {
     const validatedPayload = { kind: "validated" as const };
+    const customRequest = { ...validBridgeRequest, contract: "commerce.custom", payload: { raw: true } };
     const parsed = parseBridgeRequest(
-      { ...validBridgeRequest, contract: "commerce.custom", payload: { raw: true } },
+      customRequest,
       { now: NOW, payloadParser: () => validatedPayload },
     );
 
     expect(parsed.payload).toBe(validatedPayload);
-    expectTypeOf(parsed.payload).toEqualTypeOf<unknown>();
+    expectTypeOf(parsed.payload).toEqualTypeOf<typeof validatedPayload>();
+
+    // @ts-expect-error Custom payload types are inferred from the validator, not selected by the caller.
+    parseBridgeRequest<{ unrelated: true }>(customRequest, {
+      now: NOW,
+      payloadParser: () => validatedPayload,
+    });
   });
 
   it("rejects a stale past bridge request with a stable error code", () => {

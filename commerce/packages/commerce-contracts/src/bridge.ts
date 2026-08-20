@@ -172,6 +172,8 @@ type LogisticsBridgeRequestInput = Record<string, unknown> & {
   contract: "commerce.logistics.create";
 };
 
+type BuiltInBridgeContract = PaymentBridgeRequest["contract"] | LogisticsBridgeRequest["contract"];
+
 export function parseBridgeRequest(
   input: PaymentBridgeRequestInput,
   options?: BridgeRequestValidationOptions<unknown>,
@@ -180,6 +182,15 @@ export function parseBridgeRequest(
   input: LogisticsBridgeRequestInput,
   options?: BridgeRequestValidationOptions<unknown>,
 ): LogisticsBridgeRequest;
+export function parseBridgeRequest<
+  Input extends Record<string, unknown> & { contract: string },
+  Validator extends BridgePayloadParser<unknown>,
+>(
+  input: Input & (Input["contract"] extends BuiltInBridgeContract ? never : unknown),
+  options: Omit<BridgeRequestValidationOptions<unknown>, "payloadParser"> & {
+    payloadParser: Validator;
+  },
+): BridgeRequest<ReturnType<Validator>>;
 export function parseBridgeRequest(
   input: unknown,
   options?: BridgeRequestValidationOptions<unknown>,
