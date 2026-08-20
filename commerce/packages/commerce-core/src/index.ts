@@ -60,3 +60,29 @@ export {
   type StorageCollection,
   type WhereValue,
 } from "./storage/repositories.js";
+export {
+  addCartLine,
+  type AddCartLineInput,
+  type Cart,
+  type CartLine,
+  type CartStatus,
+} from "./domain/cart.js";
+export {
+  confirmReservation,
+  expireReservation,
+  releaseReservation,
+  reserveInventory,
+  type InventoryReservation,
+  type ReservationFailureCode,
+  type ReservationResult,
+  type ReservationStatus,
+  type ReserveInventoryInput,
+} from "./domain/inventory.js";
+export {
+  transitionOrder,
+  type FulfillmentStatus,
+  type OrderCommand,
+  type OrderState,
+  type OrderStatus,
+  type PaymentStatus,
+} from "./domain/order-state.js";
