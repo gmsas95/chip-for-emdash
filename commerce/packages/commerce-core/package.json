@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit false --module NodeNext --moduleResolution NodeNext --target ES2022 --declaration --declarationMap --sourceMap --outDir dist --rootDir src src/index.ts",
-    "typecheck": "tsc --noEmit -p ../../tsconfig.base.json"
+    "typecheck": "tsc --noEmit -p ../../tsconfig.base.json",
+    "test:consumer": "pnpm build && node test/package-consumer.mjs"
   },
   "exports": {
     ".": {
