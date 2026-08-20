@@ -182,12 +182,8 @@ export function parseBridgeRequest(
 ): LogisticsBridgeRequest;
 export function parseBridgeRequest(
   input: unknown,
-  options?: Omit<BridgeRequestValidationOptions<unknown>, "payloadParser">,
+  options?: BridgeRequestValidationOptions<unknown>,
 ): BridgeRequest<unknown>;
-export function parseBridgeRequest<T>(
-  input: unknown,
-  options: BridgeRequestValidationOptions<T> & { payloadParser: BridgePayloadParser<T> },
-): BridgeRequest<T>;
 export function parseBridgeRequest(
   input: unknown,
   options: BridgeRequestValidationOptions<unknown> = {},

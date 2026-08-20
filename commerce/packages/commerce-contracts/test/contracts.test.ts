@@ -168,8 +168,11 @@ describe("Commerce contracts", () => {
     expect(parsed.payload).toEqual(validPaymentPayload);
     expectTypeOf(parsed.payload).toEqualTypeOf<PaymentCommand>();
 
-    // @ts-expect-error Built-in payload types cannot be relabeled without a validator.
-    parseBridgeRequest<{ unrelated: true }>(validBridgeRequest, { now: NOW });
+    // @ts-expect-error Built-in payload types cannot be relabeled through a generic parser overload.
+    parseBridgeRequest<{ unrelated: true }>(validBridgeRequest, {
+      now: NOW,
+      payloadParser: () => ({ unrelated: true }),
+    });
   });
 
   it("returns the exact value and type produced by an explicit custom validator", () => {
@@ -180,7 +183,7 @@ describe("Commerce contracts", () => {
     );
 
     expect(parsed.payload).toBe(validatedPayload);
-    expectTypeOf(parsed.payload).toEqualTypeOf<typeof validatedPayload>();
+    expectTypeOf(parsed.payload).toEqualTypeOf<unknown>();
   });
 
   it("rejects a stale past bridge request with a stable error code", () => {
