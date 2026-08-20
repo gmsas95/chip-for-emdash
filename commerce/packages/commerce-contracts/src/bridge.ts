@@ -37,6 +37,8 @@ export type LogisticsBridgeRequest = BridgeRequest<LogisticsCommand> & {
   contract: "commerce.logistics.create";
 };
 
+export type BuiltInBridgeRequest = PaymentBridgeRequest | LogisticsBridgeRequest;
+
 export interface BridgeError {
   code: string;
   message: string;
@@ -74,22 +76,14 @@ export interface BridgeSigningEnvelope<T> {
   payload: T;
 }
 
-export type BridgePayloadParser<T> = (input: unknown) => T;
-
-export interface BridgeRequestValidationOptions<T = unknown> {
+export interface BridgeRequestValidationOptions {
   now?: string | Date;
   maxAgeMs?: number;
   seenRequestIds?: ReadonlySet<string>;
   seenIdempotencyKeys?: ReadonlySet<string>;
-  payloadParser?: BridgePayloadParser<T>;
 }
 
 const DEFAULT_MAX_AGE_MS = 5 * 60 * 1000;
-
-const BRIDGE_PAYLOAD_SCHEMAS: Readonly<Record<string, BridgePayloadParser<unknown>>> = {
-  "commerce.payment.create": parsePaymentCommand,
-  "commerce.logistics.create": parseLogisticsCommand,
-};
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input);
@@ -172,33 +166,19 @@ type LogisticsBridgeRequestInput = Record<string, unknown> & {
   contract: "commerce.logistics.create";
 };
 
-type BuiltInBridgeContract = PaymentBridgeRequest["contract"] | LogisticsBridgeRequest["contract"];
-
 export function parseBridgeRequest(
   input: PaymentBridgeRequestInput,
-  options?: BridgeRequestValidationOptions<unknown>,
+  options?: BridgeRequestValidationOptions,
 ): PaymentBridgeRequest;
 export function parseBridgeRequest(
   input: LogisticsBridgeRequestInput,
-  options?: BridgeRequestValidationOptions<unknown>,
+  options?: BridgeRequestValidationOptions,
 ): LogisticsBridgeRequest;
-export function parseBridgeRequest<
-  Input extends Record<string, unknown> & { contract: string },
-  Validator extends BridgePayloadParser<unknown>,
->(
-  input: Input & (Input["contract"] extends BuiltInBridgeContract ? never : unknown),
-  options: Omit<BridgeRequestValidationOptions<unknown>, "payloadParser"> & {
-    payloadParser: Validator;
-  },
-): BridgeRequest<ReturnType<Validator>>;
+export function parseBridgeRequest(input: unknown, options?: BridgeRequestValidationOptions): BuiltInBridgeRequest;
 export function parseBridgeRequest(
   input: unknown,
-  options?: BridgeRequestValidationOptions<unknown>,
-): BridgeRequest<unknown>;
-export function parseBridgeRequest(
-  input: unknown,
-  options: BridgeRequestValidationOptions<unknown> = {},
-): BridgeRequest<unknown> {
+  options: BridgeRequestValidationOptions = {},
+): BuiltInBridgeRequest {
   if (!isRecord(input)) {
     throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_INPUT, "Bridge request must be an object");
   }
@@ -266,26 +246,12 @@ export function parseBridgeRequest(
     throw new CommerceContractError(CONTRACT_ERROR_CODES.DUPLICATE_REQUEST, "Duplicate bridge request");
   }
 
-  const payloadSchema = BRIDGE_PAYLOAD_SCHEMAS[input.contract];
-  if (payloadSchema === undefined && options.payloadParser === undefined) {
-    throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_PAYLOAD, "A payload parser is required");
+  const contract = input.contract;
+  if (contract !== "commerce.payment.create" && contract !== "commerce.logistics.create") {
+    throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_PAYLOAD, "Unsupported bridge contract");
   }
 
-  let payload: unknown;
-  try {
-    // Known Commerce contracts always use their own schema; custom parsers are for future contracts.
-    payload = payloadSchema === undefined
-      ? options.payloadParser!(input.payload)
-      : payloadSchema(input.payload);
-  } catch (error) {
-    if (error instanceof CommerceContractError) {
-      throw error;
-    }
-    throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_PAYLOAD, "Invalid bridge payload");
-  }
-
-  return {
-    contract: input.contract,
+  const baseRequest = {
     version: CONTRACT_VERSION,
     requestId: input.requestId,
     idempotencyKey: input.idempotencyKey,
@@ -296,6 +262,26 @@ export function parseBridgeRequest(
       timestamp: auth.timestamp,
       signature: auth.signature,
     },
-    payload,
   };
+
+  try {
+    if (contract === "commerce.payment.create") {
+      return {
+        ...baseRequest,
+        contract,
+        payload: parsePaymentCommand(input.payload),
+      };
+    }
+
+    return {
+      ...baseRequest,
+      contract,
+      payload: parseLogisticsCommand(input.payload),
+    };
+  } catch (error) {
+    if (error instanceof CommerceContractError) {
+      throw error;
+    }
+    throw new CommerceContractError(CONTRACT_ERROR_CODES.INVALID_PAYLOAD, "Invalid bridge payload");
+  }
 }

@@ -5,9 +5,13 @@ import {
   getBridgeSigningData,
   parseBridgeRequest,
   parseMoney,
-  parsePaymentCommand,
 } from "../src/index.js";
-import type { PaymentCommand } from "../src/index.js";
+import type {
+  BuiltInBridgeRequest,
+  LogisticsBridgeRequest,
+  PaymentBridgeRequest,
+  PaymentCommand,
+} from "../src/index.js";
 
 const NOW = "2026-08-20T12:00:00.000Z";
 
@@ -31,6 +35,11 @@ const validPaymentPayload = {
   operation: "charge",
   order: validOrder,
   amount: { amountMinor: 5000, currency: "MYR" },
+};
+
+const validLogisticsPayload = {
+  operation: "create",
+  order: validOrder,
 };
 
 const validBridgeRequest = {
@@ -118,7 +127,7 @@ describe("Commerce contracts", () => {
   it("rejects a bridge request without authentication metadata", () => {
     const { auth: _auth, ...requestWithoutAuth } = validBridgeRequest;
     expectContractError(
-      () => parseBridgeRequest(requestWithoutAuth, { now: NOW, payloadParser: parsePaymentCommand }),
+      () => parseBridgeRequest(requestWithoutAuth, { now: NOW }),
       CONTRACT_ERROR_CODES.INVALID_AUTHENTICATION,
     );
   });
@@ -162,42 +171,40 @@ describe("Commerce contracts", () => {
     expect(signingData.auth).not.toHaveProperty("signature");
   });
 
-  it("returns the built-in payment payload type and rejects generic relabeling", () => {
-    const parsed = parseBridgeRequest(validBridgeRequest, { now: NOW });
+  it("keeps built-in payloads tied to their discriminated contracts", () => {
+    const parsedPayment = parseBridgeRequest(validBridgeRequest, { now: NOW });
+    expect(parsedPayment.contract).toBe("commerce.payment.create");
+    expect(parsedPayment.payload).toEqual(validPaymentPayload);
+    expectTypeOf(parsedPayment).toEqualTypeOf<PaymentBridgeRequest>();
+    expectTypeOf(parsedPayment.payload).toEqualTypeOf<PaymentCommand>();
 
-    expect(parsed.payload).toEqual(validPaymentPayload);
-    expectTypeOf(parsed.payload).toEqualTypeOf<PaymentCommand>();
-
-    // @ts-expect-error Built-in payload types cannot be relabeled through a generic parser overload.
-    parseBridgeRequest<{ unrelated: true }>(validBridgeRequest, {
-      now: NOW,
-      payloadParser: () => ({ unrelated: true }),
-    });
-
-    const unrelatedValidator: (input: unknown) => { unrelated: true } = () => ({ unrelated: true });
-    // @ts-expect-error Built-in contracts cannot be relabeled through an explicitly typed validator.
-    parseBridgeRequest<typeof unrelatedValidator>(validBridgeRequest, {
-      now: NOW,
-      payloadParser: unrelatedValidator,
-    });
+    const parsedLogistics = parseBridgeRequest(
+      { ...validBridgeRequest, contract: "commerce.logistics.create" as const, payload: validLogisticsPayload },
+      { now: NOW },
+    );
+    expect(parsedLogistics.contract).toBe("commerce.logistics.create");
+    expect(parsedLogistics.payload).toEqual(validLogisticsPayload);
+    expectTypeOf(parsedLogistics).toEqualTypeOf<LogisticsBridgeRequest>();
   });
 
-  it("returns the exact value and type produced by an explicit custom validator", () => {
-    const validatedPayload = { kind: "validated" as const };
-    const customRequest = { ...validBridgeRequest, contract: "commerce.custom", payload: { raw: true } };
-    const parsed = parseBridgeRequest(
-      customRequest,
-      { now: NOW, payloadParser: () => validatedPayload },
-    );
+  it("does not expose validator overloads for widened or mixed contracts", () => {
+    type WidenedContractRequest = Omit<typeof validBridgeRequest, "contract"> & { contract: string };
+    type MixedContractRequest = Omit<typeof validBridgeRequest, "contract"> & {
+      contract: "commerce.payment.create" | "commerce.custom";
+    };
+    const widenedRequest: WidenedContractRequest = validBridgeRequest;
+    const mixedRequest: MixedContractRequest = validBridgeRequest;
+    const unrelatedValidator = (_input: unknown) => ({ unrelated: true as const });
 
-    expect(parsed.payload).toBe(validatedPayload);
-    expectTypeOf(parsed.payload).toEqualTypeOf<typeof validatedPayload>();
+    // @ts-expect-error Built-in parsing does not accept a custom validator for widened contracts.
+    parseBridgeRequest(widenedRequest, { now: NOW, payloadParser: unrelatedValidator });
+    // @ts-expect-error Built-in parsing does not accept a custom validator for mixed contracts.
+    parseBridgeRequest(mixedRequest, { now: NOW, payloadParser: unrelatedValidator });
 
-    // @ts-expect-error Custom payload types are inferred from the validator, not selected by the caller.
-    parseBridgeRequest<{ unrelated: true }>(customRequest, {
-      now: NOW,
-      payloadParser: () => validatedPayload,
-    });
+    const parsedWidened = parseBridgeRequest(widenedRequest, { now: NOW });
+    const parsedMixed = parseBridgeRequest(mixedRequest, { now: NOW });
+    expectTypeOf(parsedWidened).toEqualTypeOf<BuiltInBridgeRequest>();
+    expectTypeOf(parsedMixed).toEqualTypeOf<BuiltInBridgeRequest>();
   });
 
   it("rejects a stale past bridge request with a stable error code", () => {
@@ -207,7 +214,6 @@ describe("Commerce contracts", () => {
           { ...validBridgeRequest, sentAt: "2026-08-20T11:54:59.000Z", auth: { ...validBridgeRequest.auth, timestamp: "2026-08-20T11:54:59.000Z" } },
           {
             now: NOW,
-            payloadParser: parsePaymentCommand,
           },
         ),
       CONTRACT_ERROR_CODES.STALE_REQUEST,
@@ -221,7 +227,6 @@ describe("Commerce contracts", () => {
           { ...validBridgeRequest, sentAt: "2026-08-20T12:05:01.000Z", auth: { ...validBridgeRequest.auth, timestamp: "2026-08-20T12:05:01.000Z" } },
           {
             now: NOW,
-            payloadParser: parsePaymentCommand,
           },
         ),
       CONTRACT_ERROR_CODES.STALE_REQUEST,
@@ -233,14 +238,13 @@ describe("Commerce contracts", () => {
       () =>
         parseBridgeRequest(validBridgeRequest, {
           now: NOW,
-          payloadParser: parsePaymentCommand,
           seenRequestIds: new Set(["request-1"]),
         }),
       CONTRACT_ERROR_CODES.DUPLICATE_REQUEST,
     );
   });
 
-  it("requires a payload parser at the bridge boundary", () => {
+  it("rejects unsupported bridge contracts at the bridge boundary", () => {
     expectContractError(
       () => parseBridgeRequest({ ...validBridgeRequest, contract: "commerce.custom" }, { now: NOW }),
       CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
@@ -258,12 +262,12 @@ describe("Commerce contracts", () => {
     );
   });
 
-  it("does not allow a custom parser to bypass the known payment schema", () => {
+  it("validates known payment contracts with the built-in schema", () => {
     expectContractError(
       () =>
         parseBridgeRequest(
           { ...validBridgeRequest, payload: { operation: "charge", order: "not-an-order" } },
-          { now: NOW, payloadParser: (payload) => payload as typeof validPaymentPayload },
+          { now: NOW },
         ),
       CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
     );
@@ -280,7 +284,7 @@ describe("Commerce contracts", () => {
               paymentMethod: { type: "card", token: "provider-secret" },
             },
           },
-          { now: NOW, payloadParser: parsePaymentCommand },
+          { now: NOW },
         ),
       CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
     );
@@ -297,7 +301,7 @@ describe("Commerce contracts", () => {
     );
   });
 
-  it("requires an explicit schema for unknown bridge contracts", () => {
+  it("rejects unknown bridge contracts", () => {
     expectContractError(
       () => parseBridgeRequest({ ...validBridgeRequest, contract: "commerce.custom" }, { now: NOW }),
       CONTRACT_ERROR_CODES.INVALID_PAYLOAD,
@@ -306,7 +310,7 @@ describe("Commerce contracts", () => {
 
   it("rejects an invalid validation clock instead of using wall-clock time", () => {
     expectContractError(
-      () => parseBridgeRequest(validBridgeRequest, { now: "not-a-timestamp", payloadParser: parsePaymentCommand }),
+      () => parseBridgeRequest(validBridgeRequest, { now: "not-a-timestamp" }),
       CONTRACT_ERROR_CODES.INVALID_REQUEST,
     );
   });
@@ -318,7 +322,6 @@ describe("Commerce contracts", () => {
           { ...validBridgeRequest, sentAt: "2026-08-20T11:58:59.000Z", auth: { ...validBridgeRequest.auth, timestamp: "2026-08-20T11:58:59.000Z" } },
           {
             now: NOW,
-            payloadParser: parsePaymentCommand,
             maxAgeMs: 60_000,
           },
         ),
