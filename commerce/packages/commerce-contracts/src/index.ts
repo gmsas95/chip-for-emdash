@@ -29,7 +29,7 @@ export type {
   ShipmentRequest,
 } from "./logistics.js";
 export { parseLogisticsCommand } from "./logistics.js";
-export { BRIDGE_AUTH_VERSION, getBridgeSigningData, parseBridgeRequest } from "./bridge.js";
+export { BRIDGE_AUTH_VERSION, getBridgeSigningData, getCommerceEventSigningData, parseBridgeRequest } from "./bridge.js";
 export type {
   BridgeAuth,
   BridgeAuthMetadata,

@@ -158,6 +158,10 @@ export function getBridgeSigningData<T>(request: BridgeRequest<T>): string {
   return JSON.stringify(canonicalize(envelope));
 }
 
+export function getCommerceEventSigningData<T>(event: CommerceEvent<T>): string {
+  return JSON.stringify(canonicalize(event));
+}
+
 type PaymentBridgeRequestInput = Record<string, unknown> & {
   contract: "commerce.payment.create";
 };

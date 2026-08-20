@@ -1,5 +1,7 @@
-import { definePlugin } from "emdash";
+import { definePlugin, PluginRouteError } from "emdash";
 import type { PluginDescriptor, ResolvedPlugin, RouteContext } from "emdash";
+import { getCommerceEventSigningData } from "@emdash-commerce/contracts";
+import type { CommerceEvent } from "@emdash-commerce/contracts";
 import { addCartLine } from "./domain/cart.js";
 import type { Cart } from "./domain/cart.js";
 import { createOrderSnapshot } from "./domain/orders.js";
@@ -36,7 +38,7 @@ function repositoriesFromContext(context: RouteContext): CommerceRepositories {
 
 function requireMethod(context: RouteContext, method: string): void {
   if (context.request.method !== method) {
-    throw new Error(`Method ${context.request.method} not allowed; expected ${method}`);
+    throw new PluginRouteError("METHOD_NOT_ALLOWED", `Method ${context.request.method} not allowed; expected ${method}`, 405);
   }
 }
 
@@ -130,28 +132,36 @@ async function bridgeEventsRoute(
   context: RouteContext,
 ): Promise<unknown> {
   requireMethod(context, "POST");
-  const deliveryIdHeader = context.request.headers.get("x-emdash-delivery-id");
   const providerId = context.request.headers.get("x-emdash-provider-id");
   const signature = context.request.headers.get("x-emdash-bridge-signature");
   const timestamp = context.request.headers.get("x-emdash-bridge-timestamp");
   const secret = providerId === null ? undefined : options.bridgeSecrets?.[providerId];
   if (!providerId || !signature || !timestamp || !secret) {
-    throw new Error("Missing bridge authentication metadata");
+    throw PluginRouteError.unauthorized("Missing bridge authentication metadata");
   }
   const body = requestBody(context);
-  const rawBody = JSON.stringify(body);
-  await verifyBridgeSignature(secret, timestamp, rawBody, signature);
   const eventId = body.eventId;
   const deliveryId = body.deliveryId;
   if (body.version !== 1 || typeof eventId !== "string" || typeof deliveryId !== "string" || typeof body.event !== "string" || typeof body.occurredAt !== "string" || typeof body.correlationId !== "string" || !("payload" in body)) {
-    throw new Error("Invalid Commerce event envelope");
+    throw PluginRouteError.badRequest("Invalid Commerce event envelope");
+  }
+  const event = body as unknown as CommerceEvent<unknown>;
+  const rawBody = getCommerceEventSigningData(event);
+  try {
+    await verifyBridgeSignature(secret, timestamp, rawBody, signature);
+  } catch {
+    throw PluginRouteError.unauthorized("Invalid bridge signature");
   }
   const repositories = repositoriesFromContext(context);
   const existing = await repositories.orderEvents.get(deliveryId);
   if (existing) {
     return { ok: true, duplicate: true, deliveryId };
   }
-  await verifyBridgeSignature(secret, timestamp, rawBody, signature, Date.now(), replayStore);
+  try {
+    await verifyBridgeSignature(secret, timestamp, rawBody, signature, Date.now(), replayStore);
+  } catch {
+    throw PluginRouteError.unauthorized("Bridge event replayed");
+  }
   await repositories.orderEvents.put(deliveryId, {
     ...body,
     id: deliveryId,
