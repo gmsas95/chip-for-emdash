@@ -120,6 +120,7 @@ export {
   commercePlugin,
   createPlugin,
   type CommercePaymentProvider,
+  type CommercePluginDescriptorOptions,
   type CommercePluginOptions,
 } from "./plugin.js";
 export {

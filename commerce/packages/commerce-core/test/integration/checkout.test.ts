@@ -42,12 +42,14 @@ describe("Commerce checkout integration", () => {
       query: (options?: never) => repository.query(options),
       count: (where?: never) => repository.count(where),
     }]));
+    let paymentCalls = 0;
     const plugin = createPlugin({
       paymentProviders: {
         chip: {
-          createPayment: async ({ order }) => ({
-            checkoutUrl: `https://gate.chip-in.asia/checkout/${order.orderId}`,
-          }),
+          createPayment: async ({ order }) => {
+            paymentCalls += 1;
+            return { checkoutUrl: `https://gate.chip-in.asia/checkout/${order.orderId}` };
+          },
         },
       },
     });
@@ -58,6 +60,10 @@ describe("Commerce checkout integration", () => {
     const result = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "chip" }, "POST")) as { checkoutUrl: string; totalMinor: number };
 
     expect(result.totalMinor).toBe(2000);
+    const replay = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "chip" }, "POST"));
+    expect(replay).toEqual(result);
+    expect(paymentCalls).toBe(1);
     expect(result.checkoutUrl).toMatch(/^https:\/\/gate\.chip-in\.asia\/checkout\//);
+    await expect(plugin.routes.orders.handler(context({ orderId: "missing" }, "POST"))).rejects.toThrow("Order not found");
   });
 });

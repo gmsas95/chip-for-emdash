@@ -23,7 +23,7 @@ export interface CommercePluginOptions {
   bridgeSecrets?: Record<string, string>;
   paymentProviders?: Record<string, CommercePaymentProvider>;
 }
-
+export type CommercePluginDescriptorOptions = Omit<CommercePluginOptions, "paymentProviders">;
 const ADMIN_PAGES = [
   { path: "/dashboard", label: "Dashboard", icon: "chart-bar" },
   { path: "/products", label: "Products", icon: "package" },
@@ -143,20 +143,46 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
   if (!cart) {
     throw PluginRouteError.notFound("Cart not found");
   }
+  const checkoutKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : cartId;
+  if (cart.status === "checked_out") {
+    if (cart.checkoutKey !== checkoutKey || !cart.checkoutResult) {
+      throw PluginRouteError.conflict("Cart has already been checked out");
+    }
+    return cart.checkoutResult;
+  }
+  if (cart.status === "checkout_pending" && cart.checkoutKey !== checkoutKey) {
+    throw PluginRouteError.conflict("Cart checkout is already in progress");
+  }
+  const checkoutOrderId = cart.checkoutOrderId ?? `${cartId}-${checkoutKey}`;
+  cart.status = "checkout_pending";
+  cart.checkoutKey = checkoutKey;
+  cart.checkoutOrderId = checkoutOrderId;
+  await repositories.carts.put(cartId, cart as never);
   let order;
   try {
-    order = createOrderSnapshot({
-      orderId: typeof body.orderId === "string" ? body.orderId : crypto.randomUUID(),
-      currency: cart.currency,
-      lines: cart.lines.map((line) => ({
+    const lines = await Promise.all(cart.lines.map(async (line) => {
+      const product = await repositories.products.get(line.productId) as unknown as Record<string, unknown> | undefined;
+      const variant = line.variantId === undefined
+        ? undefined
+        : await repositories.variants.get(line.variantId) as unknown as Record<string, unknown> | undefined;
+      const catalog = variant ?? product;
+      if (!catalog || catalog.status !== "published" || typeof catalog.priceMinor !== "number" || typeof catalog.currency !== "string") {
+        throw new Error(`Product ${line.productId} is unavailable`);
+      }
+      return {
         lineId: line.lineId,
         productId: line.productId,
-        name: line.name,
+        name: typeof catalog.name === "string" ? catalog.name : line.name,
         quantity: line.quantity,
-        unitAmountMinor: line.unitAmountMinor,
-        currency: line.currency,
-        sku: line.sku,
-      })),
+        unitAmountMinor: catalog.priceMinor,
+        currency: catalog.currency,
+        sku: typeof catalog.sku === "string" ? catalog.sku : line.sku,
+      };
+    }));
+    order = createOrderSnapshot({
+      orderId: checkoutOrderId,
+      currency: cart.currency,
+      lines,
       shippingAddress: body.shippingAddress === undefined ? undefined : parseAddressSnapshot(body.shippingAddress),
     });
   } catch (error) {
@@ -165,15 +191,19 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
   await repositories.orders.put(order.id, order);
   try {
     const payment = await provider.createPayment({ order });
-    return {
+    const result = {
       orderId: order.id,
       checkoutUrl: payment.checkoutUrl,
       ...(payment.paymentReference === undefined ? {} : { paymentReference: payment.paymentReference }),
       totalMinor: order.totalMinor,
       currency: order.currency,
     };
+    cart.status = "checked_out";
+    cart.checkoutResult = result;
+    await repositories.carts.put(cartId, cart as never);
+    return result;
   } catch (error) {
-    throw new PluginRouteError("PAYMENT_PROVIDER_ERROR", error instanceof Error ? error.message : "Payment provider failed", 502);
+    throw new PluginRouteError("PAYMENT_PROVIDER_ERROR", "Payment provider failed", 502);
   }
 }
 
@@ -187,7 +217,11 @@ async function ordersRoute(context: RouteContext): Promise<unknown> {
   if (typeof body.orderId !== "string") {
     throw PluginRouteError.badRequest("orderId is required");
   }
-  return repositories.orders.get(body.orderId);
+  const order = await repositories.orders.get(body.orderId);
+  if (!order) {
+    throw PluginRouteError.notFound("Order not found");
+  }
+  return order;
 }
 
 async function bridgeEventsRoute(
@@ -236,7 +270,7 @@ async function bridgeEventsRoute(
   return { ok: true, duplicate: false, deliveryId, eventId };
 }
 
-export function commercePlugin(options: CommercePluginOptions = {}): PluginDescriptor<CommercePluginOptions> {
+export function commercePlugin(options: CommercePluginDescriptorOptions = {}): PluginDescriptor<CommercePluginDescriptorOptions> {
   return {
     id: PLUGIN_ID,
     version: PLUGIN_VERSION,

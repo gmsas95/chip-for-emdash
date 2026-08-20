@@ -6,7 +6,7 @@ import {
   checkedMultiply,
 } from "./money.js";
 
-export type CartStatus = "active" | "checked_out" | "abandoned";
+export type CartStatus = "active" | "checkout_pending" | "checked_out" | "abandoned";
 
 export interface CartLine {
   lineId: string;
@@ -27,6 +27,15 @@ export interface Cart {
   status?: CartStatus;
   customerId?: string;
   updatedAt?: string;
+  checkoutKey?: string;
+  checkoutOrderId?: string;
+  checkoutResult?: {
+    orderId: string;
+    checkoutUrl: string;
+    paymentReference?: string;
+    totalMinor: number;
+    currency: string;
+  };
 }
 
 export interface AddCartLineInput {
