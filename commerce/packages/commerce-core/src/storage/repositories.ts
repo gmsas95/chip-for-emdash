@@ -71,16 +71,16 @@ export type CommerceStorage = {
   [Name in CommerceCollectionName]: StorageCollection<Name extends "orders" ? OrderSnapshot : JsonDocument>;
 };
 
-export interface EmDashStorageCollection<T extends object = JsonDocument> {
+export interface EmDashStorageCollection<T = unknown> {
   get(id: string): Promise<T | null>;
   put(id: string, document: T): Promise<void>;
   delete(id: string): Promise<boolean>;
-  query(options?: QueryOptions): Promise<{ items: QueryItem<T>[]; cursor?: string; hasMore: boolean }>;
+  query(options?: QueryOptions): Promise<{ items: Array<{ id: string; data: T }>; cursor?: string; hasMore: boolean }>;
   count(where?: QueryWhere): Promise<number>;
 }
 
 export type EmDashCommerceStorage = {
-  [Name in CommerceCollectionName]: EmDashStorageCollection<Name extends "orders" ? OrderSnapshot : JsonDocument>;
+  [Name in CommerceCollectionName]: EmDashStorageCollection<unknown>;
 };
 
 export class StorageQueryError extends Error {
@@ -321,12 +321,16 @@ function createMemoryRepository<T extends object>(indexes: readonly string[]): D
   };
 }
 
-async function collectEmDashDocuments<T extends object>(
-  collection: EmDashStorageCollection<T>,
+
+const MAX_CUSTOM_ORDER_SCAN = 1000;
+
+async function collectCustomOrderDocuments<T extends object>(
+  collection: EmDashStorageCollection<unknown>,
   options: QueryOptions,
 ): Promise<Array<{ id: string; data: T }>> {
   const requestOptions = { ...options, limit: MAX_LIMIT };
   delete requestOptions.cursor;
+  delete requestOptions.orderBy;
   const documents: Array<{ id: string; data: T }> = [];
   let cursor: string | undefined;
   do {
@@ -334,8 +338,12 @@ async function collectEmDashDocuments<T extends object>(
       ...requestOptions,
       ...(cursor === undefined ? {} : { cursor }),
     });
+    if (documents.length + result.items.length > MAX_CUSTOM_ORDER_SCAN) {
+      throw new StorageQueryError(`EmDash custom ordering is limited to ${MAX_CUSTOM_ORDER_SCAN} documents`);
+    }
     for (const { id, data } of result.items) {
-      documents.push({ id, data: cloneDocument(data) });
+      assertJsonDocument(data);
+      documents.push({ id, data: cloneJson(data) as T });
     }
     if (!result.hasMore) {
       break;
@@ -349,7 +357,7 @@ async function collectEmDashDocuments<T extends object>(
 }
 
 function adaptEmDashCollection<T extends object>(
-  collection: EmDashStorageCollection<T>,
+  collection: EmDashStorageCollection<unknown>,
   indexes: readonly string[],
 ): DocumentRepository<T> {
   return {
@@ -358,7 +366,8 @@ function adaptEmDashCollection<T extends object>(
       if (document === null) {
         return undefined;
       }
-      return cloneDocument(document);
+      assertJsonDocument(document);
+      return cloneJson(document) as T;
     },
     async put(id, document) {
       await collection.put(id, cloneDocument(document));
@@ -368,13 +377,26 @@ function adaptEmDashCollection<T extends object>(
     },
     async query(options = {}) {
       assertIndexed(options, indexes);
-      normalizeLimit(options.limit);
-      const documents = await collectEmDashDocuments(collection, options);
-      const memory = createMemoryRepository<T>(indexes);
-      for (const { id, data } of documents) {
-        await memory.put(id, data);
+      const customOrder = Object.keys(options.orderBy ?? {}).length > 0;
+      if (customOrder) {
+        normalizeLimit(options.limit);
+        const documents = await collectCustomOrderDocuments<T>(collection, options);
+        const memory = createMemoryRepository<T>(indexes);
+        for (const { id, data } of documents) {
+          await memory.put(id, data);
+        }
+        return memory.query(options);
       }
-      return memory.query(options);
+      const limit = normalizeLimit(options.limit);
+      const result = await collection.query({ ...options, limit });
+      return {
+        items: result.items.map(({ id, data }) => {
+          assertJsonDocument(data);
+          return { id, data: cloneJson(data) as T };
+        }),
+        ...(result.cursor === undefined ? {} : { cursor: result.cursor }),
+        hasMore: result.hasMore,
+      };
     },
     async count(where) {
       assertIndexed({ where }, indexes);

@@ -81,7 +81,7 @@ describe("Commerce repositories", () => {
       get: async () => null,
       put: async () => undefined,
       delete: async () => true,
-      query: async (options: { limit?: number; cursor?: string } = {}) => {
+      query: async (options: { limit?: number; cursor?: string; orderBy?: Record<string, "asc" | "desc"> } = {}) => {
         firstLimit ??= options.limit;
         if (options.cursor) {
           return { items: [], hasMore: false };
