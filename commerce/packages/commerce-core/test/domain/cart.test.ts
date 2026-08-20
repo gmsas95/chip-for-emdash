@@ -24,4 +24,28 @@ describe("addCartLine", () => {
       currency: "USD",
     })).toThrow("currency");
   });
+
+  it("rejects invalid existing line invariants", () => {
+    expect(() => addCartLine({
+      id: "cart-1",
+      currency: "MYR",
+      lines: [{ lineId: "bad", productId: "p-1", unitAmountMinor: 1000, quantity: 1.5, currency: "MYR", totalMinor: 1000 }],
+    }, {
+      productId: "p-2",
+      unitAmountMinor: 500,
+      quantity: 1,
+      currency: "MYR",
+    })).toThrow("quantity");
+
+    expect(() => addCartLine({
+      id: "cart-1",
+      currency: "MYR",
+      lines: [{ lineId: "bad", productId: "p-1", unitAmountMinor: 1000, quantity: 1, currency: "MYR", totalMinor: 999 }],
+    }, {
+      productId: "p-2",
+      unitAmountMinor: 500,
+      quantity: 1,
+      currency: "MYR",
+    })).toThrow("totalMinor");
+  });
 });

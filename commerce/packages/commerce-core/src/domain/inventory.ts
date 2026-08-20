@@ -1,4 +1,4 @@
-import { assertSafeNonNegativeMinorUnit, assertSafeQuantity } from "./money.js";
+import { assertSafeNonNegativeMinorUnit, assertSafeQuantity, checkedSubtract } from "./money.js";
 
 export type ReservationStatus = "active" | "confirmed" | "released" | "expired";
 
@@ -8,6 +8,7 @@ export interface InventoryReservation {
   orderId?: string;
   quantity: number;
   status: ReservationStatus;
+  remaining: number;
   idempotencyKey?: string;
   expiresAt?: string;
   createdAt: string;
@@ -56,10 +57,16 @@ export function reserveInventory(input: ReserveInventoryInput): ReservationResul
   } catch {
     return { ok: false, code: "INVALID_QUANTITY" };
   }
-
   const existing = input.existingReservation;
   if (existing !== undefined) {
-    if (existing.idempotencyKey !== input.idempotencyKey) {
+    if (
+      existing.idempotencyKey !== input.idempotencyKey ||
+      existing.quantity !== input.requested ||
+      existing.sku !== input.sku ||
+      existing.orderId !== input.orderId ||
+      (input.reservationId !== undefined && existing.id !== input.reservationId) ||
+      existing.expiresAt !== input.expiresAt
+    ) {
       return { ok: false, code: "IDEMPOTENCY_CONFLICT" };
     }
     if (existing.status === "released" || existing.status === "expired") {
@@ -70,19 +77,21 @@ export function reserveInventory(input: ReserveInventoryInput): ReservationResul
       code: "ALREADY_RESERVED",
       reservation: cloneReservation(existing),
       reserved: existing.quantity,
-      remaining: input.available,
+      remaining: existing.remaining,
     };
   }
 
   if (input.available < input.requested) {
     return { ok: false, code: "INSUFFICIENT_STOCK" };
   }
+  const remaining = checkedSubtract(input.available, input.requested, "remaining stock");
 
   const reservation: InventoryReservation = {
     id: createReservationId(input),
     ...(input.sku === undefined ? {} : { sku: input.sku }),
     ...(input.orderId === undefined ? {} : { orderId: input.orderId }),
     quantity: input.requested,
+    remaining,
     status: "active",
     ...(input.idempotencyKey === undefined ? {} : { idempotencyKey: input.idempotencyKey }),
     ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
@@ -93,7 +102,7 @@ export function reserveInventory(input: ReserveInventoryInput): ReservationResul
     code: "RESERVED",
     reservation,
     reserved: input.requested,
-    remaining: input.available - input.requested,
+    remaining,
   };
 }
 
@@ -115,7 +124,15 @@ export function releaseReservation(reservation: InventoryReservation): Inventory
 }
 
 export function expireReservation(reservation: InventoryReservation, now: string): InventoryReservation {
-  if (reservation.status !== "active" || reservation.expiresAt === undefined || now < reservation.expiresAt) {
+  if (reservation.status !== "active" || reservation.expiresAt === undefined) {
+    return cloneReservation(reservation);
+  }
+  const nowMs = Date.parse(now);
+  const expiresAtMs = Date.parse(reservation.expiresAt);
+  if (!Number.isFinite(nowMs) || !Number.isFinite(expiresAtMs)) {
+    throw new Error("Invalid reservation timestamp");
+  }
+  if (nowMs < expiresAtMs) {
     return cloneReservation(reservation);
   }
   return { ...reservation, status: "expired" };

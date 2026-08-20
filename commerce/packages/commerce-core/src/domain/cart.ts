@@ -62,7 +62,18 @@ export function addCartLine(cart: Cart, input: AddCartLineInput): Cart {
   assertSafeNonNegativeMinorUnit(input.unitAmountMinor, "unitAmountMinor");
   assertSafeQuantity(input.quantity, "quantity");
 
-  const lines = cart.lines.map((line) => ({ ...line }));
+  const lines = cart.lines.map((line) => {
+    if (!isISO4217CurrencyCode(line.currency) || line.currency !== cart.currency) {
+      throw new Error("Cart line currency must match cart currency");
+    }
+    assertSafeNonNegativeMinorUnit(line.unitAmountMinor, "unitAmountMinor");
+    assertSafeQuantity(line.quantity, "quantity");
+    const totalMinor = checkedMultiply(line.unitAmountMinor, line.quantity, "cart line totalMinor");
+    if (line.totalMinor !== undefined && line.totalMinor !== totalMinor) {
+      throw new Error("Invalid cart line totalMinor");
+    }
+    return { ...line, totalMinor };
+  });
   const existingIndex = lines.findIndex((line) => (
     lineKey(line) === lineKey(input) &&
     line.unitAmountMinor === input.unitAmountMinor &&

@@ -61,7 +61,10 @@ export function transitionOrder(order: OrderState, command: OrderCommand): Order
       if (order.status === "refunded" || order.paymentStatus === "refunded") {
         return { ...order, status: "refunded", paymentStatus: "refunded" };
       }
-      if (["paid", "processing", "partially_fulfilled", "fulfilled", "completed"].includes(order.status)) {
+      if (
+        ["paid", "processing", "partially_fulfilled", "fulfilled", "completed"].includes(order.status) ||
+        (order.status === "cancelled" && order.paymentStatus === "paid")
+      ) {
         return { ...order, status: "refunded", paymentStatus: "refunded" };
       }
       return invalidTransition();
@@ -98,6 +101,8 @@ export function transitionOrder(order: OrderState, command: OrderCommand): Order
       if (["draft", "pending_payment", "paid", "failed"].includes(order.status)) {
         return { ...order, status: "cancelled" };
       }
+      return invalidTransition();
+    default:
       return invalidTransition();
   }
 }
