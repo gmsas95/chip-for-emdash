@@ -69,7 +69,7 @@ export async function verifyBridgeSignature(
   replayStore?: BridgeReplayStore,
 ): Promise<void> {
   const timestampMs = timestampToMilliseconds(timestamp);
-  if (Math.abs(now - timestampMs) > BRIDGE_REPLAY_WINDOW_MS) {
+  if (!Number.isFinite(now) || Math.abs(now - timestampMs) > BRIDGE_REPLAY_WINDOW_MS) {
     throw new Error("Bridge timestamp expired");
   }
   let signatureBytes: Uint8Array;

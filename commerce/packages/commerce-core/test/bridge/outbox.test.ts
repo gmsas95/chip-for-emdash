@@ -20,6 +20,21 @@ describe("Commerce bridge outbox", () => {
     expect((await outbox.get("d-2"))?.attempts).toBe(1);
   });
 
+
+  it("clears a transient error after a later successful delivery", async () => {
+    const outbox = createMemoryOutbox();
+    await outbox.record({ deliveryId: "d-5", event: "payment.paid", idempotencyKey: "idem-5" });
+
+    await retryPendingDeliveries(outbox, async () => ({ ok: false, retryable: true, error: "temporary" }), "2026-08-20T00:00:00.000Z");
+    const nextAttemptAt = (await outbox.get("d-5"))?.nextAttemptAt;
+    if (!nextAttemptAt) {
+      throw new Error("Expected a retry timestamp");
+    }
+
+    await retryPendingDeliveries(outbox, async () => ({ ok: true, retryable: false }), nextAttemptAt);
+
+    expect(await outbox.get("d-5")).toMatchObject({ status: "delivered", terminalError: undefined });
+  });
   it("claims a delivery so overlapping maintenance runs invoke it once", async () => {
     const outbox = createMemoryOutbox();
     await outbox.record({ deliveryId: "d-3", event: "payment.paid", idempotencyKey: "idem-3" });

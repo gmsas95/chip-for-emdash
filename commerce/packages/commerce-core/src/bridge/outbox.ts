@@ -37,6 +37,7 @@ export interface BridgeOutbox {
   count(): Promise<number>;
   pending(now: string): Promise<EventDelivery[]>;
   claim(now: string, leaseMs: number): Promise<EventDelivery[]>;
+  renew(deliveryId: string, claimToken: string, leaseMs: number): Promise<void>;
   update(delivery: EventDelivery, claimToken: string): Promise<void>;
 }
 
@@ -146,6 +147,21 @@ class MemoryOutbox implements BridgeOutbox {
     return claimed;
   }
 
+  async renew(deliveryId: string, claimToken: string, leaseMs: number): Promise<void> {
+    const existing = this.deliveries.get(deliveryId);
+    if (!existing || existing.claimToken !== claimToken) {
+      throw new Error("OUTBOX_CLAIM_LOST");
+    }
+    if (!Number.isSafeInteger(leaseMs) || leaseMs < 1) {
+      throw new Error("Invalid outbox lease");
+    }
+    const nowMs = Date.now();
+    this.deliveries.set(deliveryId, {
+      ...existing,
+      leaseUntil: new Date(nowMs + leaseMs).toISOString(),
+    });
+  }
+
   async update(delivery: EventDelivery, claimToken: string): Promise<void> {
     const existing = this.deliveries.get(delivery.deliveryId);
     if (!existing || existing.claimToken !== claimToken) {
@@ -181,10 +197,18 @@ export async function retryPendingDeliveries(
       attempts: delivery.attempts + 1,
       lastAttemptAt: now,
     };
-    const result = await deliver(attempt);
+    const heartbeat = setInterval(() => {
+      void outbox.renew(delivery.deliveryId, claimToken, DEFAULT_LEASE_MS).catch(() => undefined);
+    }, Math.floor(DEFAULT_LEASE_MS / 2));
+    let result: DeliveryAttemptResult;
+    try {
+      result = await deliver(attempt);
+    } finally {
+      clearInterval(heartbeat);
+    }
     if (result.ok) {
       summary.delivered += 1;
-      await outbox.update({ ...attempt, status: "delivered", nextAttemptAt: undefined }, claimToken);
+      await outbox.update({ ...attempt, status: "delivered", nextAttemptAt: undefined, terminalError: undefined }, claimToken);
       continue;
     }
     if (result.retryable && attempt.attempts < MAX_ATTEMPTS) {
