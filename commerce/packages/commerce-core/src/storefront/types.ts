@@ -51,6 +51,6 @@ export interface CommerceClient {
     start(input: CheckoutStartInput): Promise<CheckoutResult>;
   };
   orders: {
-    get(orderId: string): Promise<OrderSnapshot | undefined>;
+    get(orderId: string): Promise<OrderSnapshot>;
   };
 }

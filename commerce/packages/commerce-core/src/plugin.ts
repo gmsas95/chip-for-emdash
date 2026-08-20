@@ -132,24 +132,29 @@ async function cartRoute(context: RouteContext): Promise<unknown> {
       throw PluginRouteError.badRequest("Cart line requires productId and quantity");
     }
     const product = await repositories.products.get(productId) as unknown as Record<string, unknown> | undefined;
-    if (!product || product.status !== "published") {
-      throw PluginRouteError.notFound("Product not found");
+    const variantId = typeof lineInput.variantId === "string" ? lineInput.variantId : undefined;
+    const variant = variantId === undefined
+      ? undefined
+      : await repositories.variants.get(variantId) as unknown as Record<string, unknown> | undefined;
+    if (!product || product.status !== "published" || (variantId !== undefined && (!variant || variant.status !== "published" || variant.productId !== productId))) {
+      throw PluginRouteError.notFound("Product or variant not found");
     }
-    if (typeof product.priceMinor !== "number" || typeof product.currency !== "string") {
+    const catalog = variant ?? product;
+    if (catalog.status !== "published" || typeof catalog.priceMinor !== "number" || typeof catalog.currency !== "string") {
       throw PluginRouteError.badRequest("Product price is invalid");
     }
     if (cart.lines.length === 0) {
-      cart.currency = product.currency;
+      cart.currency = catalog.currency;
     }
     try {
       cart = addCartLine(cart, {
         productId,
-        variantId: typeof lineInput.variantId === "string" ? lineInput.variantId : undefined,
-        sku: typeof product.sku === "string" ? product.sku : undefined,
-        name: typeof product.name === "string" ? product.name : undefined,
-        unitAmountMinor: product.priceMinor,
+        variantId,
+        sku: typeof catalog.sku === "string" ? catalog.sku : undefined,
+        name: typeof catalog.name === "string" ? catalog.name : undefined,
+        unitAmountMinor: catalog.priceMinor,
         quantity,
-        currency: product.currency,
+        currency: catalog.currency,
       });
     } catch (error) {
       throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid cart line");
@@ -178,7 +183,7 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     throw PluginRouteError.badRequest("cartId is required");
   }
   const checkoutKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : cartId;
-  const lockKey = `${cartId}:${checkoutKey}`;
+  const lockKey = cartId;
   const previous = checkoutLocks.get(lockKey);
   let release!: () => void;
   const current = new Promise<void>((resolve) => {
@@ -214,7 +219,7 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
         ? undefined
         : await repositories.variants.get(line.variantId) as unknown as Record<string, unknown> | undefined;
       const catalog = variant ?? product;
-      if (!catalog || catalog.status !== "published" || typeof catalog.priceMinor !== "number" || typeof catalog.currency !== "string") {
+      if (!catalog || catalog.status !== "published" || (line.variantId !== undefined && (!variant || variant.status !== "published" || variant.productId !== line.productId)) || typeof catalog.priceMinor !== "number" || typeof catalog.currency !== "string") {
         throw new Error(`Product ${line.productId} is unavailable`);
       }
       return {
