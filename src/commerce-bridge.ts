@@ -35,8 +35,8 @@ interface PaymentRecordLike {
 
 interface BridgeDeps {
 	loadSettings(ctx: PluginContext): Promise<BridgeSettings>;
-	createChipPurchase(ctx: PluginContext, payload: Record<string, unknown>): Promise<{ purchase?: Record<string, unknown>; error?: string }>;
-	getChipPurchase(ctx: PluginContext, purchaseId: string): Promise<{ purchase?: Record<string, unknown>; error?: string }>;
+	createChipPurchase(ctx: PluginContext, payload: Record<string, unknown>): Promise<{ purchase?: Record<string, unknown>; error?: string; retryable?: boolean }>;
+	getChipPurchase(ctx: PluginContext, purchaseId: string): Promise<{ purchase?: Record<string, unknown>; error?: string; retryable?: boolean }>;
 	normalizeStatus(raw: unknown): string | undefined;
 	paidOnOf(purchase: Record<string, unknown>): string | undefined;
 }
@@ -178,8 +178,10 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 			const now = new Date().toISOString();
 		const paymentId = crypto.randomUUID();
 		const returnToken = crypto.randomUUID();
-		const returnUrl = `${new URL(routeCtx.request.url).origin}/_emdash/api/plugins/chip-for-emdash/return?token=${returnToken}`;
-		let created: { purchase?: Record<string, unknown>; error?: string };
+		const requestUrl = new URL(routeCtx.request.url);
+		const returnUrl = `${requestUrl.origin}/_emdash/api/plugins/chip-for-emdash/return?token=${returnToken}`;
+		const callbackAllowed = requestUrl.port === "" || requestUrl.port === "80" || requestUrl.port === "443";
+		let created: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
 		try {
 			created = await deps.createChipPurchase(ctx, {
 				client: {},
@@ -189,7 +191,7 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 				success_redirect: returnUrl,
 				failure_redirect: returnUrl,
 				cancel_redirect: returnUrl,
-				success_callback: returnUrl,
+				...(callbackAllowed ? { success_callback: returnUrl } : {}),
 				metadata: { commerceOrderId: orderId, commercePaymentId: auth.request.requestId, idempotencyKey: auth.request.idempotencyKey },
 			});
 		} catch {
@@ -197,7 +199,7 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 		}
 		const purchaseId = created.purchase && typeof created.purchase.id === "string" ? created.purchase.id : undefined;
 		const checkoutUrl = created.purchase && typeof created.purchase.checkout_url === "string" ? created.purchase.checkout_url : undefined;
-		if (!purchaseId || !checkoutUrl) return failure(auth.request.requestId, "PROVIDER_ERROR", created.error ?? "Payment provider failed", true);
+		if (!purchaseId || !checkoutUrl) return failure(auth.request.requestId, "PROVIDER_ERROR", created.error ?? "Payment provider failed", created.retryable === true);
 		const record = {
 			id: paymentId, purchaseId, returnToken, reference: orderId, amount, currency,
 			status: "created", productName: name, checkoutUrl, createdAt: now, updatedAt: now,
@@ -225,13 +227,13 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 		if (!paymentId) return failure(auth.request.requestId, "INVALID_PAYMENT", "paymentId is required", false);
 		const entry = await findPayment(ctx, paymentId);
 		if (!entry) return failure(auth.request.requestId, "NOT_FOUND", "Payment not found", false);
-		let verified: { purchase?: Record<string, unknown>; error?: string };
+		let verified: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
 		try {
 			verified = await deps.getChipPurchase(ctx, entry.data.purchaseId);
 		} catch {
 			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment reconciliation unavailable", true);
 		}
-		if (!verified.purchase) return failure(auth.request.requestId, "PROVIDER_ERROR", verified.error ?? "Payment reconciliation failed", true);
+		if (!verified.purchase) return failure(auth.request.requestId, "PROVIDER_ERROR", verified.error ?? "Payment reconciliation failed", verified.retryable === true);
 		const normalizedRaw = deps.normalizeStatus(verified.purchase.status);
 		if (!normalizedRaw) return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment provider returned an unsupported status", false);
 		const normalized = normalizedRaw === "hold" ? "created" : normalizedRaw;
@@ -259,10 +261,24 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 		if (!paymentId) return failure(auth.request.requestId, "INVALID_PAYMENT", "paymentId is required", false);
 		const entry = await findPayment(ctx, paymentId);
 		if (!entry) return failure(auth.request.requestId, "NOT_FOUND", "Payment not found", false);
-		const verified = await deps.getChipPurchase(ctx, entry.data.purchaseId);
-		if (!verified.purchase || typeof verified.purchase.status !== "string") return failure(auth.request.requestId, "PROVIDER_ERROR", verified.error ?? "Payment reconciliation failed", true);
+		let verified: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
+		try {
+			verified = await deps.getChipPurchase(ctx, entry.data.purchaseId);
+		} catch {
+			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment reconciliation unavailable", true);
+		}
+		if (!verified.purchase || typeof verified.purchase.status !== "string") return failure(auth.request.requestId, "PROVIDER_ERROR", verified.error ?? "Payment reconciliation failed", verified.retryable === true);
 		const normalized = deps.normalizeStatus(verified.purchase.status);
-		if (normalized === "refunded") return response<CommercePaymentRefundData>(auth.request.requestId, { paymentId: entry.data.commercePaymentId ?? entry.id, status: "refunded", message: "Payment is already refunded" });
+		if (normalized === "refunded") {
+			const updated = { ...entry.data, status: "refunded", updatedAt: new Date().toISOString() };
+			await ctx.storage.payments?.put(entry.id, updated);
+			try {
+				await emitCommerceEvent(ctx, auth.settings, "commerce.payment.refunded", updated);
+			} catch (error) {
+				ctx.log.error("Commerce payment event delivery failed", error);
+			}
+			return response<CommercePaymentRefundData>(auth.request.requestId, { paymentId: entry.data.commercePaymentId ?? entry.id, status: "refunded", message: "Payment is already refunded" });
+		}
 		if (normalized !== "paid") return failure(auth.request.requestId, "REFUND_NOT_ELIGIBLE", "Payment is not provider-confirmed as paid", false);
 		const updated = { ...entry.data, metadata: { ...entry.data.metadata, commerceRefundRequested: "true", commerceRefundRequestId: auth.request.requestId }, updatedAt: new Date().toISOString() };
 		await ctx.storage.payments?.put(entry.id, updated);

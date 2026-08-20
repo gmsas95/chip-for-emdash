@@ -273,18 +273,18 @@ function chipErrorMessage(result: Pick<ChipResult, "status" | "data">): string {
 async function createChipPurchase(
 	ctx: PluginContext,
 	payload: Record<string, unknown>,
-): Promise<{ purchase?: Record<string, unknown>; error?: string }> {
+): Promise<{ purchase?: Record<string, unknown>; error?: string; retryable?: boolean }> {
 	const result = await chipRequest(ctx, "POST", "/purchases/", payload);
-	if (!result.ok) return { error: chipErrorMessage(result) };
+	if (!result.ok) return { error: chipErrorMessage(result), retryable: result.status >= 500 || result.status === 429 };
 	return { purchase: isRecord(result.data) ? result.data : undefined };
 }
 
 async function getChipPurchase(
 	ctx: PluginContext,
 	purchaseId: string,
-): Promise<{ purchase?: Record<string, unknown>; error?: string }> {
+): Promise<{ purchase?: Record<string, unknown>; error?: string; retryable?: boolean }> {
 	const result = await chipRequest(ctx, "GET", `/purchases/${encodeURIComponent(purchaseId)}/`);
-	if (!result.ok) return { error: chipErrorMessage(result) };
+	if (!result.ok) return { error: chipErrorMessage(result), retryable: result.status >= 500 || result.status === 429 };
 	return { purchase: isRecord(result.data) ? result.data : undefined };
 }
 
