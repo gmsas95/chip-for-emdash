@@ -117,7 +117,7 @@ async function cartRoute(context: RouteContext): Promise<unknown> {
   const existing = await repositories.carts.get(cartId) as unknown as Cart | undefined;
   let cart: Cart = existing ?? {
     id: cartId,
-    currency: typeof body.currency === "string" ? body.currency : "MYR",
+    currency: typeof body.currency === "string" ? body.currency : "USD",
     lines: [],
     status: "active",
   };

@@ -5,7 +5,7 @@ import { calculateTotals } from "@emdash-commerce/core/domain/totals";
 describe("Commerce core package exports", () => {
   it("resolves the published totals module through its package export", () => {
     expect(calculateTotals({
-      currency: "MYR",
+      currency: "USD",
       lines: [{ unitAmountMinor: 1000, quantity: 2 }],
       discountMinor: 200,
       taxMinor: 180,

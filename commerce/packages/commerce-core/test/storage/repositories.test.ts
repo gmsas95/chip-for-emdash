@@ -5,7 +5,7 @@ import { createEmDashRepositories, createMemoryRepositories } from "../../src/st
 describe("Commerce repositories", () => {
   it("stores JSON documents and returns isolated copies", async () => {
     const repositories = createMemoryRepositories();
-    const product = { id: "p-1", name: "Tea", priceMinor: 1000, currency: "MYR" };
+    const product = { id: "p-1", name: "Tea", priceMinor: 1000, currency: "USD" };
 
     await repositories.products.put(product.id, product);
     product.priceMinor = 1200;
@@ -14,7 +14,7 @@ describe("Commerce repositories", () => {
       id: "p-1",
       name: "Tea",
       priceMinor: 1000,
-      currency: "MYR",
+      currency: "USD",
     });
   });
 

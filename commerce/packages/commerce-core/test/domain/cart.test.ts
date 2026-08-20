@@ -5,11 +5,11 @@ describe("addCartLine", () => {
   it("merges repeated product lines without mutating the cart", () => {
     const cart = {
       id: "cart-1",
-      currency: "MYR",
-      lines: [{ lineId: "line-1", productId: "p-1", unitAmountMinor: 1000, quantity: 1, currency: "MYR" }],
+      currency: "USD",
+      lines: [{ lineId: "line-1", productId: "p-1", unitAmountMinor: 1000, quantity: 1, currency: "USD" }],
     };
 
-    const next = addCartLine(cart, { productId: "p-1", unitAmountMinor: 1000, quantity: 2, currency: "MYR" });
+    const next = addCartLine(cart, { productId: "p-1", unitAmountMinor: 1000, quantity: 2, currency: "USD" });
 
     expect(next.lines).toHaveLength(1);
     expect(next.lines[0].quantity).toBe(3);
@@ -17,35 +17,35 @@ describe("addCartLine", () => {
   });
 
   it("rejects cart lines in a different currency", () => {
-    expect(() => addCartLine({ id: "cart-1", currency: "MYR", lines: [] }, {
+    expect(() => addCartLine({ id: "cart-1", currency: "USD", lines: [] }, {
       productId: "p-1",
       unitAmountMinor: 1000,
       quantity: 1,
-      currency: "USD",
+      currency: "EUR",
     })).toThrow("currency");
   });
 
   it("rejects invalid existing line invariants", () => {
     expect(() => addCartLine({
       id: "cart-1",
-      currency: "MYR",
-      lines: [{ lineId: "bad", productId: "p-1", unitAmountMinor: 1000, quantity: 1.5, currency: "MYR", totalMinor: 1000 }],
+      currency: "USD",
+      lines: [{ lineId: "bad", productId: "p-1", unitAmountMinor: 1000, quantity: 1.5, currency: "USD", totalMinor: 1000 }],
     }, {
       productId: "p-2",
       unitAmountMinor: 500,
       quantity: 1,
-      currency: "MYR",
+      currency: "USD",
     })).toThrow("quantity");
 
     expect(() => addCartLine({
       id: "cart-1",
-      currency: "MYR",
-      lines: [{ lineId: "bad", productId: "p-1", unitAmountMinor: 1000, quantity: 1, currency: "MYR", totalMinor: 999 }],
+      currency: "USD",
+      lines: [{ lineId: "bad", productId: "p-1", unitAmountMinor: 1000, quantity: 1, currency: "USD", totalMinor: 999 }],
     }, {
       productId: "p-2",
       unitAmountMinor: 500,
       quantity: 1,
-      currency: "MYR",
+      currency: "USD",
     })).toThrow("totalMinor");
   });
 });

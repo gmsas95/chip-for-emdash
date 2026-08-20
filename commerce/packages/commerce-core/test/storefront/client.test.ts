@@ -9,16 +9,16 @@ describe("createCommerceClient", () => {
       }
       expect(url).toContain("/cart");
       expect(init?.method).toBe("POST");
-      return new Response(JSON.stringify({ success: true, data: { id: "cart-1", currency: "MYR", lines: [] } }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, data: { id: "cart-1", currency: "USD", lines: [] } }), { status: 200 });
     }, "/_emdash/api/plugins/emdash-commerce");
 
     expect(await client.catalog.list()).toEqual({ items: [{ id: "p-1" }] });
-    expect(await client.cart.create({ currency: "MYR" })).toEqual({ id: "cart-1", currency: "MYR", lines: [] });
+    expect(await client.cart.create({ currency: "USD" })).toEqual({ id: "cart-1", currency: "USD", lines: [] });
   });
 
   it("preserves typed API errors", async () => {
     const client = createCommerceClient(async () => new Response(JSON.stringify({ success: false, error: { code: "INSUFFICIENT_STOCK", message: "No stock" } }), { status: 409 }), "/api");
 
-    await expect(client.checkout.start({ cartId: "cart-1", paymentProvider: "chip" })).rejects.toMatchObject({ code: "INSUFFICIENT_STOCK", status: 409 });
+    await expect(client.checkout.start({ cartId: "cart-1", paymentProvider: "payment-provider" })).rejects.toMatchObject({ code: "INSUFFICIENT_STOCK", status: 409 });
   });
 });

@@ -44,7 +44,7 @@ export const ISO_4217_CURRENCY_CODES = [
   "JMD", "JOD", "JPY",
   "KES", "KGS", "KHR", "KMF", "KPW", "KRW", "KWD", "KYD", "KZT",
   "LAK", "LBP", "LKR", "LRD", "LSL", "LYD",
-  "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MXV", "MYR", "MZN",
+  "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MXV", "MYR", "USD", "MZN",
   "NAD", "NGN", "NIO", "NOK", "NPR", "NZD",
   "OMR",
   "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "PYG",

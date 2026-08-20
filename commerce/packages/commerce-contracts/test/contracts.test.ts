@@ -17,24 +17,24 @@ const NOW = "2026-08-20T12:00:00.000Z";
 
 const validOrder = {
   orderId: "order-1",
-  currency: "MYR",
+  currency: "USD",
   items: [
     {
       lineId: "line-1",
       name: "Widget",
       quantity: 1,
-      unitPrice: { amountMinor: 5000, currency: "MYR" },
-      total: { amountMinor: 5000, currency: "MYR" },
+      unitPrice: { amountMinor: 5000, currency: "USD" },
+      total: { amountMinor: 5000, currency: "USD" },
     },
   ],
-  subtotal: { amountMinor: 5000, currency: "MYR" },
-  total: { amountMinor: 5000, currency: "MYR" },
+  subtotal: { amountMinor: 5000, currency: "USD" },
+  total: { amountMinor: 5000, currency: "USD" },
 };
 
 const validPaymentPayload = {
   operation: "charge",
   order: validOrder,
-  amount: { amountMinor: 5000, currency: "MYR" },
+  amount: { amountMinor: 5000, currency: "USD" },
 };
 
 const validLogisticsPayload = {
@@ -70,7 +70,7 @@ function expectContractError(action: () => unknown, code: string) {
 
 describe("Commerce contracts", () => {
   it("accepts positive minor-unit money with a three-letter currency", () => {
-    expect(parseMoney({ amountMinor: 5000, currency: "MYR" })).toEqual({ amountMinor: 5000, currency: "MYR" });
+    expect(parseMoney({ amountMinor: 5000, currency: "USD" })).toEqual({ amountMinor: 5000, currency: "USD" });
   });
 
   it("rejects a bridge request with the wrong contract version", () => {
@@ -82,30 +82,30 @@ describe("Commerce contracts", () => {
   });
 
   it("accepts zero-valued money for free orders", () => {
-    expect(parseMoney({ amountMinor: 0, currency: "MYR" })).toEqual({ amountMinor: 0, currency: "MYR" });
+    expect(parseMoney({ amountMinor: 0, currency: "USD" })).toEqual({ amountMinor: 0, currency: "USD" });
   });
 
   it("accepts the safe integer upper boundary and rejects unsafe amounts", () => {
-    expect(parseMoney({ amountMinor: Number.MAX_SAFE_INTEGER, currency: "MYR" })).toEqual({
+    expect(parseMoney({ amountMinor: Number.MAX_SAFE_INTEGER, currency: "USD" })).toEqual({
       amountMinor: Number.MAX_SAFE_INTEGER,
-      currency: "MYR",
+      currency: "USD",
     });
     expectContractError(
-      () => parseMoney({ amountMinor: Number.MAX_SAFE_INTEGER + 1, currency: "MYR" }),
+      () => parseMoney({ amountMinor: Number.MAX_SAFE_INTEGER + 1, currency: "USD" }),
       CONTRACT_ERROR_CODES.INVALID_AMOUNT,
     );
   });
 
   it("rejects a non-integer amount with a stable error code", () => {
     expectContractError(
-      () => parseMoney({ amountMinor: 10.5, currency: "MYR" }),
+      () => parseMoney({ amountMinor: 10.5, currency: "USD" }),
       CONTRACT_ERROR_CODES.INVALID_AMOUNT,
     );
   });
 
   it("rejects a negative amount with a stable error code", () => {
     expectContractError(
-      () => parseMoney({ amountMinor: -1, currency: "MYR" }),
+      () => parseMoney({ amountMinor: -1, currency: "USD" }),
       CONTRACT_ERROR_CODES.NEGATIVE_AMOUNT,
     );
   });

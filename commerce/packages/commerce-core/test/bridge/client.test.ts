@@ -6,7 +6,7 @@ describe("sendBridgeCommand", () => {
   it("sends a signed request and parses a provider response", async () => {
     let requestBody = "";
     const response = await sendBridgeCommand({
-      pluginId: "chip",
+      pluginId: "payment-provider",
       basePath: "https://commerce.test/bridge",
       eventPath: "https://commerce.test/bridge/events",
       capabilities: ["payment.create"],
@@ -21,7 +21,7 @@ describe("sendBridgeCommand", () => {
       requestId: "req-1",
       idempotencyKey: "idem-1",
       sentAt: new Date().toISOString(),
-      payload: { operation: "charge", order: { orderId: "o-1", currency: "MYR", items: [], subtotal: { amountMinor: 0, currency: "MYR" }, total: { amountMinor: 0, currency: "MYR" } } },
+      payload: { operation: "charge", order: { orderId: "o-1", currency: "USD", items: [], subtotal: { amountMinor: 0, currency: "USD" }, total: { amountMinor: 0, currency: "USD" } } },
     });
 
     expect(response).toEqual({ requestId: "req-1", ok: true, data: { checkoutUrl: "https://pay.test" } });
@@ -31,7 +31,7 @@ describe("sendBridgeCommand", () => {
 
   it("marks authentication failures as non-retryable", async () => {
     const response = await sendBridgeCommand({
-      pluginId: "chip",
+      pluginId: "payment-provider",
       basePath: "https://commerce.test/bridge",
       eventPath: "https://commerce.test/bridge/events",
       capabilities: ["payment.create"],
@@ -43,7 +43,7 @@ describe("sendBridgeCommand", () => {
       requestId: "req-2",
       idempotencyKey: "idem-2",
       sentAt: new Date().toISOString(),
-      payload: { operation: "charge", order: { orderId: "o-2", currency: "MYR", items: [], subtotal: { amountMinor: 0, currency: "MYR" }, total: { amountMinor: 0, currency: "MYR" } } },
+      payload: { operation: "charge", order: { orderId: "o-2", currency: "USD", items: [], subtotal: { amountMinor: 0, currency: "USD" }, total: { amountMinor: 0, currency: "USD" } } },
     });
 
     expect(response.error).toMatchObject({ retryable: false });
@@ -51,7 +51,7 @@ describe("sendBridgeCommand", () => {
 
   it("keeps malformed transient HTTP failures retryable", async () => {
     const response = await sendBridgeCommand({
-      pluginId: "chip",
+      pluginId: "payment-provider",
       basePath: "https://commerce.test/bridge",
       eventPath: "https://commerce.test/bridge/events",
       capabilities: ["payment.create"],
@@ -63,7 +63,7 @@ describe("sendBridgeCommand", () => {
       requestId: "req-3",
       idempotencyKey: "idem-3",
       sentAt: new Date().toISOString(),
-      payload: { operation: "charge", order: { orderId: "o-3", currency: "MYR", items: [], subtotal: { amountMinor: 0, currency: "MYR" }, total: { amountMinor: 0, currency: "MYR" } } },
+      payload: { operation: "charge", order: { orderId: "o-3", currency: "USD", items: [], subtotal: { amountMinor: 0, currency: "USD" }, total: { amountMinor: 0, currency: "USD" } } },
     });
 
     expect(response.error).toMatchObject({ code: "HTTP_503", retryable: true });

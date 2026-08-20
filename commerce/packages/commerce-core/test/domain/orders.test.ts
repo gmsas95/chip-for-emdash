@@ -8,7 +8,7 @@ describe("createOrderSnapshot", () => {
       productId: "p-1",
       quantity: 1,
       priceMinor: 1000,
-      currency: "MYR",
+      currency: "USD",
     });
 
     expect(order.lines[0]).toMatchObject({
@@ -16,7 +16,7 @@ describe("createOrderSnapshot", () => {
       quantity: 1,
       unitAmountMinor: 1000,
       totalMinor: 1000,
-      currency: "MYR",
+      currency: "USD",
     });
     expect(order.totalMinor).toBe(1000);
   });
@@ -24,7 +24,7 @@ describe("createOrderSnapshot", () => {
   it("can be passed to the shared payment bridge contract", () => {
     const order = createOrderSnapshot({
       orderId: "o-bridge",
-      currency: "MYR",
+      currency: "USD",
       productId: "p-1",
       quantity: 1,
       priceMinor: 1000,
@@ -39,7 +39,7 @@ describe("createOrderSnapshot", () => {
     const customer = { name: "Ada", email: "ada@example.test" };
     const order = createOrderSnapshot({
       orderId: "o-2",
-      currency: "MYR",
+      currency: "USD",
       lines: [{ lineId: "line-1", productId: "p-1", name: "Tea", quantity: 2, unitAmountMinor: 1000 }],
       discountMinor: 200,
       taxMinor: 180,

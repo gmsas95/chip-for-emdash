@@ -12,26 +12,26 @@ describe("Commerce checkout integration", () => {
       requests.push({ url, body });
       if (url.endsWith("/checkout")) {
         const totals = calculateTotals({
-          currency: "MYR",
+          currency: "USD",
           lines: [{ unitAmountMinor: 1000, quantity: 2 }],
           discountMinor: 200,
           taxMinor: 180,
           shippingMinor: 500,
         });
-        return new Response(JSON.stringify({ success: true, data: { orderId: "order-1", checkoutUrl: "https://gate.chip-in.asia/checkout/test", totalMinor: totals.totalMinor, currency: totals.currency } }), { status: 200 });
+        return new Response(JSON.stringify({ success: true, data: { orderId: "order-1", checkoutUrl: "https://payments.example.test/checkout/test", totalMinor: totals.totalMinor, currency: totals.currency } }), { status: 200 });
       }
       return new Response(JSON.stringify({ success: true, data: {} }), { status: 200 });
     }, "/_emdash/api/plugins/emdash-commerce");
 
-    const result = await client.checkout.start({ cartId: "cart-1", paymentProvider: "chip" });
+    const result = await client.checkout.start({ cartId: "cart-1", paymentProvider: "payment-provider" });
 
-    expect(result).toEqual({ orderId: "order-1", checkoutUrl: "https://gate.chip-in.asia/checkout/test", totalMinor: 2480, currency: "MYR" });
+    expect(result).toEqual({ orderId: "order-1", checkoutUrl: "https://payments.example.test/checkout/test", totalMinor: 2480, currency: "USD" });
     expect(requests[0]?.body).not.toHaveProperty("totalMinor");
   });
 
   it("runs the native checkout route with a fake payment provider and catalog pricing", async () => {
     const repositories = createMemoryRepositories();
-    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 1000, currency: "MYR" });
+    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 1000, currency: "USD" });
     const storage = Object.fromEntries(Object.entries(repositories).map(([name, repository]) => [name, {
       get: async (id: string) => (await repository.get(id)) ?? null,
       put: (id: string, data: never) => repository.put(id, data),
@@ -45,10 +45,10 @@ describe("Commerce checkout integration", () => {
     let paymentCalls = 0;
     const plugin = createPlugin({
       paymentProviders: {
-        chip: {
+        "payment-provider": {
           createPayment: async ({ order }) => {
             paymentCalls += 1;
-            return { checkoutUrl: `https://gate.chip-in.asia/checkout/${order.orderId}` };
+            return { checkoutUrl: `https://payments.example.test/checkout/${order.orderId}` };
           },
         },
       },
@@ -57,13 +57,13 @@ describe("Commerce checkout integration", () => {
     const context = (input: unknown, method: string) => ({ input, request: request(method), storage, requestMeta: {} }) as never;
 
     const cart = await plugin.routes.cart.handler(context({ line: { productId: "p-1", quantity: 2 } }, "POST")) as { id: string };
-    const result = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "chip" }, "POST")) as { checkoutUrl: string; totalMinor: number };
+    const result = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "payment-provider" }, "POST")) as { checkoutUrl: string; totalMinor: number };
 
     expect(result.totalMinor).toBe(2000);
-    const replay = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "chip" }, "POST"));
+    const replay = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "payment-provider" }, "POST"));
     expect(replay).toEqual(result);
     expect(paymentCalls).toBe(1);
-    expect(result.checkoutUrl).toMatch(/^https:\/\/gate\.chip-in\.asia\/checkout\//);
+    expect(result.checkoutUrl).toMatch(/^https:\/\/payments\.example\.test\/checkout\//);
     await expect(plugin.routes.orders.handler(context({ orderId: "missing" }, "POST"))).rejects.toThrow("Order not found");
   });
 });

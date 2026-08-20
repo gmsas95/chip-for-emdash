@@ -10,9 +10,9 @@ Commerce Core owns the canonical commerce domain: catalog, variants, prices, car
 Astro storefront
       |
       v
-Commerce Core  <---- signed bridge ---->  Payment plugin (for example CHIP)
+Commerce Core  <---- signed bridge ---->  Payment plugin
       |
-      +---------- signed bridge -------->  Logistics plugin (for example Delyva)
+      +---------- signed bridge -------->  Logistics plugin
 ```
 
 Commerce never trusts browser-supplied totals. Prices, discounts, tax, shipping, inventory, and order totals are recalculated server-side in integer minor units with an explicit ISO currency.
@@ -25,7 +25,7 @@ Provider-specific credentials, response payloads, and diagnostics remain owned b
 - `@emdash-commerce/core` — native EmDash plugin, repositories, domain workflows, provider bridge, admin pages, and storefront client.
 - `@emdash-commerce/test-fixtures` — reserved workspace package for shared provider fixtures.
 
-CHIP and Delyva are not bundled in this repository. They are independent EmDash plugins installed alongside Commerce Core.
+Payment and logistics integrations are not bundled in this repository. They are independent EmDash plugins installed alongside Commerce Core.
 
 ## Development
 

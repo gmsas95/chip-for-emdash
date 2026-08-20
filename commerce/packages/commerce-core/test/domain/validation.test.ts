@@ -4,7 +4,7 @@ import { validateCheckout } from "../../src/domain/validation.js";
 describe("validateCheckout", () => {
   it("accepts a valid checkout input without errors", () => {
     expect(validateCheckout({
-      currency: "MYR",
+      currency: "USD",
       lines: [{ unitAmountMinor: 1000, quantity: 2 }],
       discountMinor: 200,
       taxMinor: 180,
@@ -14,10 +14,10 @@ describe("validateCheckout", () => {
 
   it("returns structured errors instead of throwing for invalid user input", () => {
     const result = validateCheckout({
-      currency: "MYR",
+      currency: "USD",
       lines: [
         { unitAmountMinor: -1, quantity: 0 },
-        { unitAmountMinor: 500, quantity: 1, currency: "USD" },
+        { unitAmountMinor: 500, quantity: 1, currency: "EUR" },
       ],
       discountMinor: 2000,
       taxMinor: 0,
@@ -38,7 +38,7 @@ describe("validateCheckout", () => {
 
   it("reports non-safe and non-finite money values", () => {
     const result = validateCheckout({
-      currency: "MYR",
+      currency: "USD",
       lines: [{ unitAmountMinor: Number.MAX_SAFE_INTEGER + 1, quantity: 1 }],
       discountMinor: NaN,
       taxMinor: Infinity,
@@ -58,7 +58,7 @@ describe("validateCheckout", () => {
 
   it("reports overflow for structurally valid checkout lines", () => {
     const result = validateCheckout({
-      currency: "MYR",
+      currency: "USD",
       lines: [
         { unitAmountMinor: Number.MAX_SAFE_INTEGER, quantity: 1 },
         { unitAmountMinor: 1, quantity: 1 },
