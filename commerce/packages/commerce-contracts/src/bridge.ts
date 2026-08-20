@@ -5,6 +5,8 @@ import {
 } from "./money.js";
 import { parseLogisticsCommand } from "./logistics.js";
 import { parsePaymentCommand } from "./payment.js";
+import type { LogisticsCommand } from "./logistics.js";
+import type { PaymentCommand } from "./payment.js";
 
 export const BRIDGE_AUTH_VERSION = 1 as const;
 
@@ -26,6 +28,14 @@ export interface BridgeRequest<T> {
   auth: BridgeAuthMetadata;
   payload: T;
 }
+
+export type PaymentBridgeRequest = BridgeRequest<PaymentCommand> & {
+  contract: "commerce.payment.create";
+};
+
+export type LogisticsBridgeRequest = BridgeRequest<LogisticsCommand> & {
+  contract: "commerce.logistics.create";
+};
 
 export interface BridgeError {
   code: string;
@@ -154,9 +164,29 @@ export function getBridgeSigningData<T>(request: BridgeRequest<T>): string {
   return JSON.stringify(canonicalize(envelope));
 }
 
-export function parseBridgeRequest<T = unknown>(
+type PaymentBridgeRequestInput = Record<string, unknown> & {
+  contract: "commerce.payment.create";
+};
+
+type LogisticsBridgeRequestInput = Record<string, unknown> & {
+  contract: "commerce.logistics.create";
+};
+
+export function parseBridgeRequest(
+  input: PaymentBridgeRequestInput,
+  options?: BridgeRequestValidationOptions<unknown>,
+): PaymentBridgeRequest;
+export function parseBridgeRequest(
+  input: LogisticsBridgeRequestInput,
+  options?: BridgeRequestValidationOptions<unknown>,
+): LogisticsBridgeRequest;
+export function parseBridgeRequest(
   input: unknown,
-  options?: BridgeRequestValidationOptions<T>,
+  options?: Omit<BridgeRequestValidationOptions<unknown>, "payloadParser">,
+): BridgeRequest<unknown>;
+export function parseBridgeRequest<T>(
+  input: unknown,
+  options: BridgeRequestValidationOptions<T> & { payloadParser: BridgePayloadParser<T> },
 ): BridgeRequest<T>;
 export function parseBridgeRequest(
   input: unknown,

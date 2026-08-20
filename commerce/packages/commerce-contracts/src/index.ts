@@ -40,4 +40,6 @@ export type {
   BridgeResponse,
   BridgeSigningEnvelope,
   CommerceEvent,
+  LogisticsBridgeRequest,
+  PaymentBridgeRequest,
 } from "./bridge.js";

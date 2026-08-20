@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   CONTRACT_ERROR_CODES,
   CommerceContractError,
@@ -7,6 +7,7 @@ import {
   parseMoney,
   parsePaymentCommand,
 } from "../src/index.js";
+import type { PaymentCommand } from "../src/index.js";
 
 const NOW = "2026-08-20T12:00:00.000Z";
 
@@ -33,7 +34,7 @@ const validPaymentPayload = {
 };
 
 const validBridgeRequest = {
-  contract: "commerce.payment.create",
+  contract: "commerce.payment.create" as const,
   version: 1 as const,
   requestId: "request-1",
   idempotencyKey: "idempotency-1",
@@ -159,6 +160,27 @@ describe("Commerce contracts", () => {
       },
     });
     expect(signingData.auth).not.toHaveProperty("signature");
+  });
+
+  it("returns the built-in payment payload type and rejects generic relabeling", () => {
+    const parsed = parseBridgeRequest(validBridgeRequest, { now: NOW });
+
+    expect(parsed.payload).toEqual(validPaymentPayload);
+    expectTypeOf(parsed.payload).toEqualTypeOf<PaymentCommand>();
+
+    // @ts-expect-error Built-in payload types cannot be relabeled without a validator.
+    parseBridgeRequest<{ unrelated: true }>(validBridgeRequest, { now: NOW });
+  });
+
+  it("returns the exact value and type produced by an explicit custom validator", () => {
+    const validatedPayload = { kind: "validated" as const };
+    const parsed = parseBridgeRequest(
+      { ...validBridgeRequest, contract: "commerce.custom", payload: { raw: true } },
+      { now: NOW, payloadParser: () => validatedPayload },
+    );
+
+    expect(parsed.payload).toBe(validatedPayload);
+    expectTypeOf(parsed.payload).toEqualTypeOf<typeof validatedPayload>();
   });
 
   it("rejects a stale past bridge request with a stable error code", () => {
