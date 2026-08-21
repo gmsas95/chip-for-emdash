@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBridgeRequest } from "@emdash-commerce/contracts";
+import { parseBridgeRequest } from "@gmsas95/emdash-commerce-contracts";
 import { sendBridgeCommand } from "../../src/bridge/client.js";
 
 describe("sendBridgeCommand", () => {

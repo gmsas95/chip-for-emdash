@@ -1,5 +1,5 @@
 {
-  "name": "@emdash-commerce/contracts",
+  "name": "@gmsas95/emdash-commerce-contracts",
   "version": "0.1.0",
   "description": "Versioned provider-neutral Commerce domain and bridge contracts for EmDash.",
   "license": "MIT",

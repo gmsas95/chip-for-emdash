@@ -1,4 +1,4 @@
-import { CommerceContractError, CONTRACT_ERROR_CODES } from "@emdash-commerce/contracts";
+import { CommerceContractError, CONTRACT_ERROR_CODES } from "@gmsas95/emdash-commerce-contracts";
 import {
   assertCurrency,
   assertSafeNonNegativeMinorUnit,

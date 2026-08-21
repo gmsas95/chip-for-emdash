@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc --noEmit false --module NodeNext --moduleResolution NodeNext --target ES2022 --jsx react-jsx --skipLibCheck --declaration --declarationMap --sourceMap --outDir dist --rootDir src src/index.ts src/admin.tsx",
     "typecheck": "tsc --noEmit -p ../../tsconfig.base.json",
-    "test:consumer": "pnpm --filter @emdash-commerce/contracts build && pnpm build && node test/package-consumer.mjs"
+    "test:consumer": "pnpm --filter @gmsas95/emdash-commerce-contracts build && pnpm build && node test/package-consumer.mjs"
   },
   "exports": {
     ".": {
@@ -39,7 +39,7 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@emdash-commerce/contracts": "workspace:*"
+    "@gmsas95/emdash-commerce-contracts": "workspace:*"
   },
   "peerDependencies": {
     "emdash": ">=0.33.0",

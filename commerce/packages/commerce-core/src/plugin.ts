@@ -1,7 +1,7 @@
 import { definePlugin, PluginRouteError } from "emdash";
 import type { PluginDescriptor, ResolvedPlugin, RouteContext } from "emdash";
-import { getCommerceEventSigningData, parseAddressSnapshot } from "@emdash-commerce/contracts";
-import type { CommerceEvent } from "@emdash-commerce/contracts";
+import { getCommerceEventSigningData, parseAddressSnapshot } from "@gmsas95/emdash-commerce-contracts";
+import type { CommerceEvent } from "@gmsas95/emdash-commerce-contracts";
 import { addCartLine } from "./domain/cart.js";
 import type { Cart } from "./domain/cart.js";
 import { createOrderSnapshot } from "./domain/orders.js";

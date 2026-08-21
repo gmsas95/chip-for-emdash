@@ -16,7 +16,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.base.json",
     "test": "vitest run",
-    "build": "pnpm --filter @emdash-commerce/contracts build && pnpm --filter @emdash-commerce/core build",
+    "build": "pnpm --filter @gmsas95/emdash-commerce-contracts build && pnpm --filter @emdash-commerce/core build",
     "lint": "tsc --noEmit -p tsconfig.base.json"
   },
   "devDependencies": {

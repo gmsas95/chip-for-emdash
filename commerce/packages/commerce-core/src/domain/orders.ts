@@ -1,4 +1,4 @@
-import type { AddressSnapshot, CustomerSnapshot, Money, OrderItem, OrderSnapshot as ContractOrderSnapshot } from "@emdash-commerce/contracts";
+import type { AddressSnapshot, CustomerSnapshot, Money, OrderItem, OrderSnapshot as ContractOrderSnapshot } from "@gmsas95/emdash-commerce-contracts";
 import { calculateTotals } from "./totals.js";
 
 export interface OrderSnapshotLine {

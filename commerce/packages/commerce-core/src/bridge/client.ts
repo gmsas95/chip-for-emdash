@@ -1,5 +1,5 @@
-import { getBridgeSigningData } from "@emdash-commerce/contracts";
-import type { BridgeRequest, BridgeResponse } from "@emdash-commerce/contracts";
+import { getBridgeSigningData } from "@gmsas95/emdash-commerce-contracts";
+import type { BridgeRequest, BridgeResponse } from "@gmsas95/emdash-commerce-contracts";
 import { signBridgePayload } from "./signature.js";
 
 export interface BridgeConnection {

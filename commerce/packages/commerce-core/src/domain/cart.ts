@@ -1,4 +1,4 @@
-import { isISO4217CurrencyCode } from "@emdash-commerce/contracts";
+import { isISO4217CurrencyCode } from "@gmsas95/emdash-commerce-contracts";
 import {
   assertSafeNonNegativeMinorUnit,
   assertSafeQuantity,

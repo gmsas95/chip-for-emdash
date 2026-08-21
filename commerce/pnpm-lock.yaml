@@ -22,7 +22,7 @@ importers:
 
   packages/commerce-core:
     dependencies:
-      '@emdash-commerce/contracts':
+      '@gmsas95/emdash-commerce-contracts':
         specifier: workspace:*
         version: link:../commerce-contracts
       emdash:

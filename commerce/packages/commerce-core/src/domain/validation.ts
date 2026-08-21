@@ -1,4 +1,4 @@
-import { isISO4217CurrencyCode } from "@emdash-commerce/contracts";
+import { isISO4217CurrencyCode } from "@gmsas95/emdash-commerce-contracts";
 import { isSafeQuantity } from "./money.js";
 import { calculateSubtotalMinor, calculateTotals } from "./totals.js";
 import type { TotalsInput, TotalsLine } from "./totals.js";

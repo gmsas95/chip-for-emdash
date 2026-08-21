@@ -1,5 +1,5 @@
-import { getBridgeSigningData, getCommerceEventSigningData, parseBridgeRequest } from "@emdash-commerce/contracts";
-import type { BridgeRequest, CommerceEvent } from "@emdash-commerce/contracts";
+import { getBridgeSigningData, getCommerceEventSigningData, parseBridgeRequest } from "@gmsas95/emdash-commerce-contracts";
+import type { BridgeRequest, CommerceEvent } from "@gmsas95/emdash-commerce-contracts";
 import type { PluginContext, RouteHandler } from "emdash/plugin";
 import { signBridgePayload, verifyBridgePayload } from "./bridge/signature.js";
 import type {

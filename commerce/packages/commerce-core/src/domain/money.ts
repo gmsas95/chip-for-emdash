@@ -2,9 +2,9 @@ import {
   CONTRACT_ERROR_CODES,
   CommerceContractError,
   isISO4217CurrencyCode,
-} from "@emdash-commerce/contracts";
+} from "@gmsas95/emdash-commerce-contracts";
 
-export type { Money } from "@emdash-commerce/contracts";
+export type { Money } from "@gmsas95/emdash-commerce-contracts";
 
 export function isSafeNonNegativeMinorUnit(input: unknown): input is number {
   return typeof input === "number" && Number.isSafeInteger(input) && input >= 0;

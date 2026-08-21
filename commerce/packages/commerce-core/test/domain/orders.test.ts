@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PaymentCommand } from "@emdash-commerce/contracts";
+import type { PaymentCommand } from "@gmsas95/emdash-commerce-contracts";
 import { createOrderSnapshot } from "../../src/domain/orders.js";
 describe("createOrderSnapshot", () => {
   it("captures the historical line-item price", () => {
