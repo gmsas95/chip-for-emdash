@@ -120,16 +120,33 @@ before the payment record is updated.
 
 The CHIP plugin can act as a payment extension for the separate EmDash Commerce Core repository. Commerce remains the owner of carts, orders, inventory, and authoritative totals; this plugin owns CHIP credentials, purchases, callbacks, reconciliation, and provider-specific records.
 
-Install the published Commerce Contracts package alongside the plugin when it becomes available:
+Install the published Commerce Contracts package alongside the plugin:
 
 ```sh
-npm install @emdash-commerce/contracts
+npm install @gmsas95/emdash-commerce-contracts
 ```
+
+Install and register the CHIP plugin using the normal EmDash plugin flow. This
+plugin is standard-format and can run in trusted `plugins: []` mode or sandboxed
+`sandboxed: []` mode when a sandbox runner is configured.
 
 Configure the following server-side plugin settings:
 
 - `settings:commerceBridgeSecret` — shared HMAC secret used for versioned Commerce commands.
 - `settings:commerceEventUrl` — Commerce `POST /bridge/events` endpoint.
+
+### Commerce network consent
+
+Commerce event delivery targets the customer-configured Commerce Core URL. The
+Commerce-enabled CHIP release declares `network:request:unrestricted`, because
+the destination host is different for every customer deployment. EmDash shows
+this as an explicit installation trust capability; review and accept it only for
+deployments where the plugin is trusted.
+
+The unrestricted capability is a plugin installation/deployment trust setting. It
+does not expose the bridge secret to the browser and does not change Commerce
+Core's HMAC authentication. Configure the same server-side bridge secret in both
+plugins, and keep the Commerce event URL server-side.
 
 Commerce payment command routes:
 
