@@ -326,13 +326,13 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
   } catch (error) {
     cart.status = "active";
     cart.checkoutKey = undefined;
-    cart.checkoutOrderId = undefined;
     await repositories.carts.put(cartId, cart as never);
     throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid checkout");
   }
   await repositories.orders.put(order.id, order);
   try {
-    const payment = await provider.createPayment({ order, idempotencyKey: checkoutKey });
+    const { orderAccessToken: _providerOrderAccessToken, ...providerOrder } = order;
+    const payment = await provider.createPayment({ order: providerOrder as OrderSnapshot, idempotencyKey: checkoutKey });
     const storedResult = {
       orderId: order.id,
       checkoutUrl: payment.checkoutUrl,
