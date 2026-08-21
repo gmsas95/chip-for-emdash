@@ -58,6 +58,17 @@ function providerErrorRetryable(error: unknown): boolean {
 	const message = error instanceof Error ? error.message : "";
 	return !/secret key|network:request|not configured/i.test(message);
 }
+interface CommerceEventDeliveryRecord {
+	id: string;
+	deliveryId: string;
+	eventUrl: string;
+	timestamp: string;
+	signature: string;
+	body: string;
+	status: "pending" | "delivered";
+	attempts: number;
+	nextAttemptAt?: string;
+}
 
 async function authenticate(
 	routeCtx: Parameters<RouteHandler>[0],
@@ -136,18 +147,32 @@ export async function emitCommerceEvent(
 	};
 	const body = getCommerceEventSigningData(commerceEvent);
 	const signature = await signBridgePayload(settings.commerceBridgeSecret, now, body);
-	if (!ctx.http) throw new Error("Commerce event delivery requires network capability");
-	const response = await ctx.http.fetch(settings.commerceEventUrl, {
-		method: "POST",
-		headers: {
-			"content-type": "application/json",
-			"x-emdash-provider-id": "chip",
-			"x-emdash-bridge-signature": signature,
-			"x-emdash-bridge-timestamp": now,
-		},
-		body,
-	});
-	if (!response.ok) throw new Error(`Commerce event delivery failed with HTTP ${response.status}`);
+	const existing = await ctx.storage.commerce_events?.get(commerceEvent.deliveryId);
+	if (isRecord(existing) && existing.status === "delivered") return;
+	const delivery: CommerceEventDeliveryRecord = isRecord(existing)
+		? existing as unknown as CommerceEventDeliveryRecord
+		: { id: commerceEvent.deliveryId, deliveryId: commerceEvent.deliveryId, eventUrl: settings.commerceEventUrl, timestamp: now, signature, body, status: "pending", attempts: 0 };
+	await ctx.storage.commerce_events?.put(delivery.id, delivery);
+	if (!ctx.http) return;
+	try {
+		const response = await ctx.http.fetch(delivery.eventUrl, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-emdash-provider-id": "chip",
+				"x-emdash-bridge-signature": delivery.signature,
+				"x-emdash-bridge-timestamp": delivery.timestamp,
+			},
+			body: delivery.body,
+		});
+		if (response.ok) {
+			await ctx.storage.commerce_events?.put(delivery.id, { ...delivery, status: "delivered", attempts: delivery.attempts + 1 });
+		} else {
+			await ctx.storage.commerce_events?.put(delivery.id, { ...delivery, status: "pending", attempts: delivery.attempts + 1, nextAttemptAt: new Date(Date.now() + 30_000).toISOString() });
+		}
+	} catch {
+		await ctx.storage.commerce_events?.put(delivery.id, { ...delivery, status: "pending", attempts: delivery.attempts + 1, nextAttemptAt: new Date(Date.now() + 30_000).toISOString() });
+	}
 }
 
 export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { public: true; handler: RouteHandler }> {
@@ -178,14 +203,30 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 		await previous;
 		try {
 			const existing = await findByIdempotency(ctx, auth.request.idempotencyKey);
-			if (existing) return response(auth.request.requestId, { paymentId: existing.data.commercePaymentId ?? existing.id, providerId: "chip", checkoutUrl: existing.data.checkoutUrl, status: existing.data.status });
+			if (existing) {
+				if (existing.data.commerceOrderId !== orderId || existing.data.amount !== amount || existing.data.currency !== currency) {
+					return failure(auth.request.requestId, "IDEMPOTENCY_CONFLICT", "Idempotency key was reused with different payment data", false);
+				}
+				if (existing.data.status === "creating") return failure(auth.request.requestId, "PAYMENT_CREATION_IN_PROGRESS", "Payment creation is already in progress", true);
+				return response(auth.request.requestId, { paymentId: existing.data.commercePaymentId ?? existing.id, providerId: "chip", checkoutUrl: existing.data.checkoutUrl, status: existing.data.status });
+			}
 			const now = new Date().toISOString();
-		const paymentId = crypto.randomUUID();
-		const returnToken = crypto.randomUUID();
-		const requestUrl = new URL(routeCtx.request.url);
-		const returnUrl = `${requestUrl.origin}/_emdash/api/plugins/chip-for-emdash/return?token=${returnToken}`;
-		const callbackAllowed = requestUrl.port === "" || requestUrl.port === "80" || requestUrl.port === "443";
-		let created: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
+			const paymentId = crypto.randomUUID();
+			const returnToken = crypto.randomUUID();
+			const requestUrl = new URL(routeCtx.request.url);
+			const returnUrl = `${requestUrl.origin}/_emdash/api/plugins/chip-for-emdash/return?token=${returnToken}`;
+			const callbackAllowed = requestUrl.port === "" || requestUrl.port === "80" || requestUrl.port === "443";
+			const claimRecord = {
+				id: paymentId, purchaseId: "", returnToken, reference: orderId, amount, currency,
+				status: "creating", productName: name, createdAt: now, updatedAt: now,
+				commerceOrderId: orderId, commercePaymentId: auth.request.requestId, idempotencyKey: auth.request.idempotencyKey,
+			};
+			try {
+				await ctx.storage.payments?.put(claimRecord.id, claimRecord);
+			} catch {
+				return failure(auth.request.requestId, "PAYMENT_CREATION_IN_PROGRESS", "Payment creation is already in progress", true);
+			}
+			let created: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
 		try {
 			created = await deps.createChipPurchase(ctx, {
 				client: {},

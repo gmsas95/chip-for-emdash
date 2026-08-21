@@ -50,7 +50,7 @@ const SETTINGS_KEYS = {
 } as const;
 
 /** Statuses the plugin persists. PRD §4.5's five-status model, extended with `refunded` (CHIP-dashboard refunds are a real merchant flow; see README "Refunds"). */
-type PaymentStatus = "created" | "paid" | "failed" | "cancelled" | "hold" | "refunded";
+type PaymentStatus = "creating" | "created" | "paid" | "failed" | "cancelled" | "hold" | "refunded";
 
 interface PaymentRecord {
 	id: string;
@@ -835,7 +835,35 @@ const commerceBridgeRoutes = createCommerceBridgeRoutes({
 	normalizeStatus,
 	paidOnOf,
 });
+async function retryCommerceEvents(ctx: PluginContext): Promise<void> {
+	const now = Date.now();
+	const pending = await ctx.storage.commerce_events?.query({ where: { status: "pending" }, limit: 50 });
+	for (const item of pending?.items ?? []) {
+		const record = item.data as Record<string, unknown>;
+		const nextAttemptAt = typeof record.nextAttemptAt === "string" ? Date.parse(record.nextAttemptAt) : 0;
+		if (Number.isFinite(nextAttemptAt) && nextAttemptAt > now) continue;
+		if (!ctx.http || typeof record.eventUrl !== "string" || typeof record.body !== "string" || typeof record.signature !== "string" || typeof record.timestamp !== "string") continue;
+		try {
+			const response = await ctx.http.fetch(record.eventUrl, {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					"x-emdash-provider-id": "chip",
+					"x-emdash-bridge-signature": record.signature,
+					"x-emdash-bridge-timestamp": record.timestamp,
+				},
+				body: record.body,
+			});
+			const attempts = typeof record.attempts === "number" ? record.attempts + 1 : 1;
+			await ctx.storage.commerce_events?.put(item.id, response.ok ? { ...record, status: "delivered", attempts } : { ...record, status: "pending", attempts, nextAttemptAt: new Date(now + 60_000).toISOString() });
+		} catch {
+			const attempts = typeof record.attempts === "number" ? record.attempts + 1 : 1;
+			await ctx.storage.commerce_events?.put(item.id, { ...record, status: "pending", attempts, nextAttemptAt: new Date(now + 60_000).toISOString() });
+		}
+	}
+}
 export default {
+	hooks: { cron: async (_event, ctx) => retryCommerceEvents(ctx) },
 	routes: {
 		create: { public: true, handler: createHandler },
 		return: { public: true, handler: returnHandler },
