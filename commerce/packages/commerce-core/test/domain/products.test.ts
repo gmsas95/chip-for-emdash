@@ -69,6 +69,18 @@ describe("Commerce product contracts", () => {
     })).toThrow(/currency/);
   });
 
+  it("defaults missing images for legacy product records", () => {
+    expect(validateProductInput({
+      name: "Tea",
+      slug: "tea",
+      description: "",
+      status: "draft",
+      priceMinor: 1200,
+      currency: "MYR",
+      hasVariants: false,
+    })).toMatchObject({ images: [] });
+  });
+
   it("rejects invalid slugs and statuses", () => {
     expect(() => validateProductInput({
       name: "Tea",

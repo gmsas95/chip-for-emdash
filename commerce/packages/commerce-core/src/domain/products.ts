@@ -113,8 +113,9 @@ export function validateProductInput(input: unknown): ProductDocument {
   if (compareAtMinor !== undefined && priceMinor !== undefined && compareAtMinor < priceMinor) {
     throw new TypeError("compareAtMinor cannot be lower than priceMinor");
   }
-  if (!Array.isArray(input.images)) throw new TypeError("images must be an array");
-  const images = input.images.map(image);
+  const rawImages = input.images === undefined ? [] : input.images;
+  if (!Array.isArray(rawImages)) throw new TypeError("images must be an array");
+  const images = rawImages.map(image);
   return {
     name,
     slug,
