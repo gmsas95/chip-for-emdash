@@ -4,8 +4,10 @@
   "description": "Versioned provider-neutral Commerce domain and bridge contracts for EmDash.",
   "license": "MIT",
   "repository": "https://github.com/gmsas95/emdash-commerce-core",
-  "private": true,
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --noEmit false --module NodeNext --moduleResolution NodeNext --target ES2022 --declaration --declarationMap --sourceMap --outDir dist --rootDir src src/index.ts",
     "typecheck": "tsc --noEmit -p ../../tsconfig.base.json"
