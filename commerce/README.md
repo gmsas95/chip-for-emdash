@@ -85,3 +85,23 @@ This repository contains the Commerce Core and Contracts implementation. A compl
 4. Customer-owned deployment bindings, domains, database, storage, and secrets.
 
 The standalone provider plugins and an official starter distribution are separate deliverables.
+
+## Deployable starter
+
+`apps/commerce-starter` is a Cloudflare deployment based on EmDash's upstream
+`templates/starter-cloudflare`. It registers Commerce Core and the CHIP payment
+plugin together, with D1, R2, KV sessions, and the Commerce event scheduler.
+
+```sh
+pnpm install
+pnpm --filter @gmsas95/emdash-commerce-starter deploy
+```
+
+Then open `/_emdash/admin/setup`, configure CHIP credentials and callback URLs
+in the CHIP plugin settings, set the Commerce bridge secret, and create a
+published product before starting checkout. The full client onboarding and
+route checklist is in
+[`apps/commerce-starter/README.md`](apps/commerce-starter/README.md).
+
+The starter provisions customer-owned Cloudflare resources. Replace the
+example Worker, D1, R2, and KV names/IDs before deploying to a new account.

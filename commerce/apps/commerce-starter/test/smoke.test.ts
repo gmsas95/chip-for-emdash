@@ -11,9 +11,20 @@ describe("Commerce starter", () => {
   it("registers Commerce Core and CHIP in trusted EmDash plugins", async () => {
     const source = await read("astro.config.mjs");
 
-    expect(source).toContain('commercePlugin()');
+    expect(source).toContain("commercePlugin");
     expect(source).toContain("chipForEmdash");
     expect(source).toContain("plugins:");
+  });
+
+  it("wires the CHIP bridge from deployment-only environment variables", async () => {
+    const source = await read("astro.config.mjs");
+
+    expect(source).toContain("bridgeSecrets");
+    expect(source).toContain("paymentBridges");
+    expect(source).toContain("COMMERCE_BRIDGE_SECRET");
+    expect(source).toContain("PUBLIC_SITE_URL");
+    expect(source).toContain("required for production builds");
+
   });
 
   it("declares customer-owned Cloudflare bindings and scheduled maintenance", async () => {
