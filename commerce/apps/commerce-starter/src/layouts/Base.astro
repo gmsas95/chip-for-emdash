@@ -1,86 +1,95 @@
 ---
-import { getMenu, getSiteSettings } from "emdash";
 import {
-	WidgetArea,
-	EmDashHead,
-	EmDashBodyStart,
-	EmDashBodyEnd,
+  EmDashBodyEnd,
+  EmDashBodyStart,
+  EmDashHead,
+  WidgetArea,
 } from "emdash/ui";
+import { getMenu, getSiteSettings } from "emdash";
 import { createPublicPageContext } from "emdash/page";
 import LiveSearch from "emdash/ui/search";
 import { resolveStarterSiteIdentity } from "../utils/site-identity";
+import "../styles/storefront.css";
 
 interface Props {
-	title: string;
-	pageTitle?: string | null;
-	description?: string | null;
-	image?: string | null;
-	canonical?: string | null;
-	/** Pass content reference for plugin page contributions on content pages */
-	content?: { collection: string; id: string; slug?: string | null };
+  title: string;
+  pageTitle?: string | null;
+  description?: string | null;
+  image?: string | null;
+  canonical?: string | null;
+  content?: { collection: string; id: string; slug?: string | null };
 }
 
 const { title, pageTitle, description, image, canonical, content } = Astro.props;
 const { siteTitle, siteTagline, siteLogo } = resolveStarterSiteIdentity(await getSiteSettings());
 const fullTitle = title.includes(siteTitle) ? title : `${title} — ${siteTitle}`;
 const pageDescription = description ?? siteTagline;
-
 const menu = await getMenu("primary");
-
 const pageCtx = createPublicPageContext({
-	Astro,
-	kind: content ? "content" : "custom",
-	pageType: "website",
-	title: fullTitle,
-	pageTitle: pageTitle ?? title,
-	description: pageDescription,
-	canonical,
-	image,
-	content,
-	siteName: siteTitle,
+  Astro,
+  kind: content ? "content" : "custom",
+  pageType: "website",
+  title: fullTitle,
+  pageTitle: pageTitle ?? title,
+  description: pageDescription,
+  canonical,
+  image,
+  content,
+  siteName: siteTitle,
 });
 ---
 
 <!doctype html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>{fullTitle}</title>
-		{pageDescription && <meta name="description" content={pageDescription} />}
-		{canonical && <link rel="canonical" href={canonical} />}
-		<EmDashHead page={pageCtx} />
-	</head>
-	<body>
-		<EmDashBodyStart page={pageCtx} />
-
-		<header>
-			<nav>
-				<a href="/">
-					{siteLogo
-						? <img src={siteLogo.url} alt={siteLogo.alt || siteTitle} style="height:48px;width:auto;margin:-8px 0;display:block;" />
-						: siteTitle
-					}
-				</a>
-				{
-					menu?.items.map((item) => (
-						<a href={item.url} target={item.target}>
-							{item.label}
-						</a>
-					))
-				}
-				<LiveSearch placeholder="Search..." collections={["posts", "pages"]} />
-			</nav>
-		</header>
-
-		<main>
-			<slot />
-		</main>
-
-		<footer>
-			<WidgetArea name="sidebar" />
-		</footer>
-
-		<EmDashBodyEnd page={pageCtx} />
-	</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{fullTitle}</title>
+    {pageDescription && <meta name="description" content={pageDescription} />}
+    {canonical && <link rel="canonical" href={canonical} />}
+    <EmDashHead page={pageCtx} />
+  </head>
+  <body>
+    <EmDashBodyStart page={pageCtx} />
+    <header class="site-header">
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a class="brand" href="/">
+          {siteLogo
+            ? <img src={siteLogo.url} alt={siteLogo.alt || siteTitle} />
+            : <span>{siteTitle}</span>}
+        </a>
+        <div class="nav-links">
+          <a href="/shop">Shop</a>
+          {menu?.items.map((item) => <a href={item.url} target={item.target}>{item.label}</a>)}
+          <a href="/about">About</a>
+          <a class="cart-link" href="/cart">Cart <span data-cart-count>0</span></a>
+        </div>
+        <LiveSearch placeholder="Search..." collections={["posts", "pages"]} />
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div>
+        <p class="eyebrow">{siteTitle}</p>
+        <p>{siteTagline || "Thoughtful goods, shipped with care."}</p>
+      </div>
+      <nav aria-label="Footer navigation">
+        <a href="/shipping-returns">Shipping & returns</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <WidgetArea name="sidebar" />
+    </footer>
+    <EmDashBodyEnd page={pageCtx} />
+    <script is:inline>
+      (() => {
+        const key = "commerce-cart-id";
+        const count = document.querySelector("[data-cart-count]");
+        if (count && window.localStorage.getItem(key)) count.textContent = "•";
+      })();
+    </script>
+  </body>
 </html>

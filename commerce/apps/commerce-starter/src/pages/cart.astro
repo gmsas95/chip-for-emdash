@@ -1,0 +1,44 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Cart" description="Review your selected products.">
+  <div class="page-wrap section">
+    <p class="eyebrow">Your selection</p>
+    <h1>Cart</h1>
+    <div id="cart-app" class="cart-layout"></div>
+    <script is:inline>
+      (() => {
+        const root = document.querySelector("#cart-app");
+        if (!root) return;
+        const linesKey = "commerce-cart-lines";
+        const format = (minor, currency) => new Intl.NumberFormat("en-MY", { style: "currency", currency }).format(minor / 100);
+        const render = (catalog) => {
+          const lines = JSON.parse(window.localStorage.getItem(linesKey) || "[]");
+          root.replaceChildren();
+          if (!lines.length) { const empty = document.createElement("p"); empty.className = "empty-state"; empty.textContent = "Your cart is empty."; root.append(empty); return; }
+          const list = document.createElement("div"); list.className = "cart-list";
+          for (const [index, line] of lines.entries()) {
+            const product = catalog.find((item) => item.id === line.productId);
+            const variant = product?.data.variants?.find((item) => item.id === line.variantId);
+            if (!product) continue;
+            const row = document.createElement("article"); row.className = "cart-row";
+            const title = document.createElement("h2"); title.textContent = variant ? `${product.data.name} — ${variant.name}` : product.data.name;
+            const price = variant?.priceMinor ?? product.data.priceMinor ?? 0;
+            const amount = document.createElement("p"); amount.textContent = `${format(price, variant?.currency || product.data.currency)} each`;
+            const quantity = document.createElement("input"); quantity.type = "number"; quantity.min = "1"; quantity.max = "99"; quantity.value = String(line.quantity); quantity.setAttribute("aria-label", `Quantity for ${product.data.name}`);
+            quantity.addEventListener("change", () => { line.quantity = Math.max(1, Math.min(99, Number(quantity.value) || 1)); window.localStorage.setItem(linesKey, JSON.stringify(lines)); render(catalog); });
+            const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary"; remove.textContent = "Remove"; remove.addEventListener("click", () => { lines.splice(index, 1); window.localStorage.setItem(linesKey, JSON.stringify(lines)); render(catalog); });
+            row.append(title, amount, quantity, remove); list.append(row);
+          }
+          root.append(list);
+          const note = document.createElement("p"); note.className = "notice"; note.textContent = "Final totals and availability are confirmed by Commerce at checkout."; root.append(note);
+          const checkout = document.createElement("a"); checkout.className = "button"; checkout.href = "/checkout"; checkout.textContent = "Continue to checkout"; root.append(checkout);
+        };
+        fetch("/_emdash/api/plugins/emdash-commerce/catalog", { credentials: "same-origin", headers: { "X-EmDash-Request": "1" } })
+          .then((response) => response.json().then((body) => ({ response, body })))
+          .then(({ response, body }) => { if (!response.ok || body.success !== true) throw new Error(body.error?.message || "Catalog unavailable"); render(body.data?.items || []); })
+          .catch(() => { root.replaceChildren(); const error = document.createElement("p"); error.className = "error-state"; error.textContent = "We couldn't load your cart. Please try again."; root.append(error); });
+      })();
+    </script>
+  </div>
+</Base>

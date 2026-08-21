@@ -18,7 +18,7 @@ export type CommerceCollectionName = (typeof COMMERCE_COLLECTIONS)[number];
 export const COMMERCE_COLLECTION_INDEXES = {
   products: ["status", "createdAt", "sku"],
   variants: ["status", "createdAt", "productId", "sku"],
-  inventory: ["status", "createdAt", "sku"],
+  inventory: ["status", "createdAt", "productId", "variantId", "sku"],
   reservations: ["status", "createdAt", "sku", "orderId", "idempotencyKey"],
   carts: ["status", "createdAt", "customerId", "idempotencyKey"],
   orders: ["status", "createdAt", "customerId", "idempotencyKey"],

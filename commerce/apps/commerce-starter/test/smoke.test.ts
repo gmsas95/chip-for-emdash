@@ -35,4 +35,27 @@ describe("Commerce starter", () => {
     expect(source).toContain('"crons"');
     expect(source).not.toMatch(/secret|token|api[_-]?key/i);
   });
+
+  it("ships the required storefront pages and checkout entry points", async () => {
+    const pages = await Promise.all([
+      read("src/pages/shop/index.astro"),
+      read("src/pages/shop/[slug].astro"),
+      read("src/pages/cart.astro"),
+      read("src/pages/checkout.astro"),
+      read("src/pages/checkout/result.astro"),
+      read("src/pages/orders/[id].astro"),
+      read("src/pages/about.astro"),
+      read("src/pages/shipping-returns.astro"),
+      read("src/pages/privacy.astro"),
+      read("src/pages/terms.astro"),
+      read("src/pages/contact.astro"),
+    ]);
+    expect(pages.join("\n")).toContain("paymentProvider");
+  });
+
+  it("builds Commerce Core before bundling the Worker", async () => {
+    const source = await read("package.json");
+    expect(source).toContain("\"pnpm --filter @emdash-commerce/core build && astro build\"");
+    expect(source).toContain("\"deploy\": \"pnpm run build && wrangler deploy\"");
+  });
 });

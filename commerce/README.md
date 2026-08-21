@@ -47,11 +47,16 @@ pnpm --filter @emdash-commerce/core test:consumer
 ## Native plugin
 
 Commerce is installed as a native EmDash plugin. It exposes:
-
 - Dashboard, products, inventory, orders, customers, and settings admin pages.
-- Storefront routes for catalog, cart, checkout, and orders.
+- Persisted product CRUD with variants, inventory, non-destructive archive, and
+  authenticated EmDash media uploads.
+- Storefront routes for catalog, cart, checkout, token-protected order status,
+  and the checkout result flow.
 - `POST /bridge/events` for authenticated provider events.
-- Scoped indexed storage collections for Commerce-owned records.
+- Scoped indexed storage collections for Commerce-owned records, persisted in
+  EmDash's D1-backed plugin storage.
+- Product images are stored through EmDash's configured media adapter, which is
+  R2-backed in the Cloudflare starter.
 
 The plugin route boundary uses EmDash's parsed route input. Provider events use the canonical `getCommerceEventSigningData()` representation before HMAC signing. Provider event requests include the provider identity and bridge signature headers documented by the bridge client and contracts.
 

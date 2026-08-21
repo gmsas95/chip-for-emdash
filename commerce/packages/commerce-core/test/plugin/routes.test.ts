@@ -15,16 +15,23 @@ describe("Commerce native plugin", () => {
     ]);
   });
 
-  it("exposes authenticated commerce routes including bridge events", () => {
+  it("exposes authenticated commerce routes including product administration and bridge events", () => {
     const plugin = createPlugin({});
 
     expect(Object.keys(plugin.routes)).toEqual(expect.arrayContaining([
       "catalog",
+      "products",
+      "products/detail",
+      "products/save",
+      "products/archive",
       "cart",
       "checkout",
+      "order",
       "orders",
       "bridge/events",
     ]));
     expect(plugin.routes["bridge/events"]?.public).toBe(true);
+    expect(plugin.routes.products?.public).toBe(false);
+    expect(plugin.routes.order?.public).toBe(true);
   });
 });

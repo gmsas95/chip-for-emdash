@@ -73,28 +73,65 @@ After deployment:
 
 1. Open `https://<worker-domain>/_emdash/admin/setup`.
 2. Complete EmDash setup and sign in to the admin.
-3. Open the CHIP plugin settings page.
-4. Enter the CHIP secret key and brand ID from the CHIP portal.
-5. Set success, failure, and cancel URLs to pages on the deployed site.
-6. Set **Commerce Bridge Secret** to the same `COMMERCE_BRIDGE_SECRET` value.
-7. Set **Commerce Event URL** to
-   `https://<worker-domain>/_emdash/api/plugins/emdash-commerce/bridge/events`.
-8. Use the built-in credential test before enabling live payments.
-9. Create and publish at least one Commerce product and variant.
-10. Start checkout through Commerce's storefront API using provider `chip`.
-11. Complete a CHIP test payment, then verify the order status and payment
-    record in the EmDash admin.
+3. Open Commerce → **Products**.
+4. Create a product, choose draft/published status, set SKU/currency/pricing,
+   add variants, and set inventory counts.
+5. Upload product images from the product editor. Uploads use the authenticated
+   EmDash media API and are stored in the configured R2 bucket; product records
+   store only media references in D1.
+6. Publish at least one product and confirm it appears at `/shop`.
+7. Open the CHIP settings page directly if the sidebar link is not visible:
+   `https://<worker-domain>/_emdash/admin/plugins/chip-for-emdash/settings`.
+8. Enter the CHIP secret key and brand ID from the CHIP portal.
+9. Set success, failure, and cancel URLs to
+   `https://<worker-domain>/checkout/result?status=success`,
+   `https://<worker-domain>/checkout/result?status=failure`, and
+   `https://<worker-domain>/checkout/result?status=cancel`.
+10. Set **Commerce Bridge Secret** to the same `COMMERCE_BRIDGE_SECRET` value.
+11. Set **Commerce Event URL** to
+    `https://<worker-domain>/_emdash/api/plugins/emdash-commerce/bridge/events`.
+12. Use the built-in credential test before enabling live payments.
+13. Complete a CHIP test payment from `/checkout`, then verify the order,
+    customer, inventory, and payment record in the admin.
 
 The CHIP plugin keeps the secret key server-side, verifies browser returns and callbacks by re-fetching the confirmed CHIP purchase, and uses idempotent Commerce bridge deliveries. Do not put CHIP credentials or the bridge secret in browser code.
 
 ## Routes and APIs
+
+Storefront pages:
+
+- `/`
+- `/shop`
+- `/shop/<slug>`
+- `/cart`
+- `/checkout`
+- `/checkout/result`
+- `/orders/<order-id>`
+- `/about`
+- `/shipping-returns`
+- `/privacy`
+- `/terms`
+- `/contact`
 
 Commerce's storefront client targets:
 
 - `GET /_emdash/api/plugins/emdash-commerce/catalog`
 - `POST /_emdash/api/plugins/emdash-commerce/cart`
 - `POST /_emdash/api/plugins/emdash-commerce/checkout`
-- `POST /_emdash/api/plugins/emdash-commerce/orders`
+- `POST /_emdash/api/plugins/emdash-commerce/order` with the checkout access token
+
+Commerce admin routes are authenticated:
+
+- `GET /_emdash/api/plugins/emdash-commerce/products`
+- `GET /_emdash/api/plugins/emdash-commerce/products/detail`
+- `POST /_emdash/api/plugins/emdash-commerce/products/save`
+- `POST /_emdash/api/plugins/emdash-commerce/products/archive`
+- `GET /_emdash/api/plugins/emdash-commerce/inventory`
+- `GET /_emdash/api/plugins/emdash-commerce/orders`
+- `GET /_emdash/api/plugins/emdash-commerce/customers`
+
+Product records and orders persist in D1-backed Commerce collections. Product
+media persists through EmDash's R2-backed media library.
 
 The CHIP plugin exposes its payment routes under:
 

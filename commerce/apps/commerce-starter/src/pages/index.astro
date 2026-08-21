@@ -1,48 +1,41 @@
 ---
-import { getEmDashCollection, getSiteSettings } from "emdash";
-import { Image } from "emdash/ui";
+import { getSiteSettings } from "emdash";
 import Base from "../layouts/Base.astro";
+import ClientCatalog from "../components/ClientCatalog.astro";
 import { resolveStarterSiteIdentity } from "../utils/site-identity";
 
-const { entries: posts, cacheHint } = await getEmDashCollection("posts", {
-	orderBy: { published_at: "desc" },
-});
 const { siteTitle, siteTagline } = resolveStarterSiteIdentity(await getSiteSettings());
-if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
 ---
 
 <Base title={siteTitle} description={siteTagline}>
-	<h1>Recent Posts</h1>
-
-	{
-		posts.length === 0 ? (
-			<p>
-				No posts yet.{" "}
-				<a href="/_emdash/admin/content/posts/new">Create one</a>.
-			</p>
-		) : (
-			<ul>
-				{posts.map((post) => (
-					<li>
-						<a href={`/posts/${post.id}`}>
-							{post.data.featured_image && (
-								<Image image={post.data.featured_image} />
-							)}
-							<h2>{post.data.title}</h2>
-						</a>
-						{post.data.excerpt && <p>{post.data.excerpt}</p>}
-						{post.data.publishedAt && (
-							<time datetime={post.data.publishedAt.toISOString()}>
-								{post.data.publishedAt.toLocaleDateString("en-US", {
-									year: "numeric",
-									month: "long",
-									day: "numeric",
-								})}
-							</time>
-						)}
-					</li>
-				))}
-			</ul>
-		)
-	}
+  <section class="hero">
+    <div>
+      <p class="eyebrow">A considered collection</p>
+      <h1>Good things, chosen well.</h1>
+      <p class="lede">A calm, confident storefront for products people keep, use, and come back to.</p>
+      <p><a class="button" href="/shop">Explore the collection</a></p>
+    </div>
+    <div class="hero-art" aria-label="Featured collection artwork"></div>
+  </section>
+  <section class="section" aria-labelledby="featured-heading">
+    <div class="section-heading">
+      <div><p class="eyebrow">The collection</p><h2 id="featured-heading">Made for the everyday.</h2></div>
+      <a class="button secondary" href="/shop">View all</a>
+    </div>
+    <ClientCatalog id="featured-products" limit={4} />
+  </section>
+  <section class="split-section">
+    <p class="eyebrow">The standard</p>
+    <h2>Thoughtful materials. Clear choices. No noise.</h2>
+    <p class="lede">Every order is calculated server-side, paid through a secure hosted checkout, and tracked from purchase to delivery.</p>
+  </section>
+  <section class="section" id="faq">
+    <p class="eyebrow">Questions</p>
+    <h2>Simple from first click to doorstep.</h2>
+    <div class="form-stack">
+      <details><summary>How does checkout work?</summary><p>You review your cart, enter delivery details, and continue to CHIP's hosted payment page.</p></details>
+      <details><summary>How do returns work?</summary><p>See our <a href="/shipping-returns">shipping and returns policy</a> for the current process.</p></details>
+      <details><summary>Can I contact someone?</summary><p>Yes. Reach us through the <a href="/contact">contact page</a>.</p></details>
+    </div>
+  </section>
 </Base>

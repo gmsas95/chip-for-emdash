@@ -1,3 +1,4 @@
+import type { CustomerSnapshot } from "@gmsas95/emdash-commerce-contracts";
 import type { OrderSnapshot } from "../domain/orders.js";
 export interface CatalogResult<T = unknown> {
   items: T[];
@@ -36,15 +37,16 @@ export interface CartLineInput {
     quantity: number;
   };
 }
-
 export interface CheckoutStartInput {
   cartId: string;
   paymentProvider: string;
+  customer?: CustomerSnapshot;
   shippingAddress?: Record<string, unknown>;
 }
 
 export interface CheckoutResult {
   orderId: string;
+  orderAccessToken: string;
   checkoutUrl: string;
   paymentReference?: string;
   totalMinor: number;
@@ -63,6 +65,6 @@ export interface CommerceClient {
     start(input: CheckoutStartInput): Promise<CheckoutResult>;
   };
   orders: {
-    get(orderId: string): Promise<OrderSnapshot>;
+    get(orderId: string, orderAccessToken: string): Promise<OrderSnapshot>;
   };
 }

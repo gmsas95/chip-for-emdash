@@ -1,4 +1,21 @@
 export {
+  isRecord,
+} from "./domain/guards.js";
+export {
+  isPublishedProduct,
+  isPublishedVariant,
+  validateInventoryInput,
+  validateProductInput,
+  validateVariantInput,
+  type InventoryDocument,
+  type InventoryStatus,
+  type ProductDocument,
+  type ProductImage,
+  type ProductStatus,
+  type VariantDocument,
+  type VariantStatus,
+} from "./domain/products.js";
+export {
   calculateSubtotalMinor,
   calculateTotals,
   type OrderTotals,

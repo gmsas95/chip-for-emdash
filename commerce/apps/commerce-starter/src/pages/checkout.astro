@@ -1,0 +1,74 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Checkout" description="Secure checkout through CHIP.">
+  <div class="page-wrap section">
+    <p class="eyebrow">Almost there</p>
+    <h1>Checkout</h1>
+    <p class="lede">Commerce verifies availability and recalculates the total before sending you to CHIP's hosted payment page.</p>
+    <form id="checkout-form" class="form-stack">
+      <div class="form-grid">
+        <label>Name <input name="name" required autocomplete="name" /></label>
+        <label>Email <input name="email" type="email" required autocomplete="email" /></label>
+        <label>Phone <input name="phone" autocomplete="tel" /></label>
+        <label>Country <input name="country" value="MY" required autocomplete="country" /></label>
+        <label>Address <input name="line1" required autocomplete="address-line1" /></label>
+        <label>Address line 2 <input name="line2" autocomplete="address-line2" /></label>
+        <label>City <input name="city" required autocomplete="address-level2" /></label>
+        <label>State <input name="state" autocomplete="address-level1" /></label>
+        <label>Postal code <input name="postalCode" required autocomplete="postal-code" /></label>
+      </div>
+      <button type="submit">Continue to CHIP</button>
+      <p id="checkout-error" class="error-state" hidden role="alert"></p>
+      <p id="checkout-status" role="status"></p>
+    </form>
+    <script is:inline>
+      (() => {
+        const form = document.querySelector("#checkout-form");
+        const errorNode = document.querySelector("#checkout-error");
+        const statusNode = document.querySelector("#checkout-status");
+        if (!(form instanceof HTMLFormElement)) return;
+        const request = async (path, body) => {
+          const response = await fetch(`/_emdash/api/plugins/emdash-commerce${path}`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "X-EmDash-Request": "1" }, body: JSON.stringify(body) });
+          const envelope = await response.json();
+          if (!response.ok || envelope.success !== true || envelope.data?.success === false) throw new Error(envelope.error?.message || envelope.data?.error?.message || `Checkout failed (${response.status})`);
+          return envelope.data;
+        };
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          if (errorNode) errorNode.hidden = true;
+          if (statusNode) statusNode.textContent = "Preparing your secure checkout...";
+          const lines = JSON.parse(window.localStorage.getItem("commerce-cart-lines") || "[]");
+          if (!lines.length) { if (errorNode) { errorNode.hidden = false; errorNode.textContent = "Your cart is empty."; } return; }
+          try {
+            const catalogResponse = await fetch("/_emdash/api/plugins/emdash-commerce/catalog", { credentials: "same-origin", headers: { "X-EmDash-Request": "1" } });
+            const catalogEnvelope = await catalogResponse.json();
+            if (!catalogResponse.ok || catalogEnvelope.success !== true) throw new Error("Catalog unavailable");
+            const first = lines[0];
+            const product = catalogEnvelope.data.items.find((item) => item.id === first.productId);
+            const variant = product?.data.variants?.find((item) => item.id === first.variantId);
+            if (!product) throw new Error("A product in your cart is no longer available.");
+            const cart = await request("/cart", { currency: variant?.currency || product.data.currency });
+            for (const line of lines) await request("/cart", { cartId: cart.id, line });
+            const data = new FormData(form);
+            const checkout = await request("/checkout", {
+              cartId: cart.id,
+              paymentProvider: "chip",
+              idempotencyKey: crypto.randomUUID(),
+              customer: { name: data.get("name"), email: data.get("email"), phone: data.get("phone") },
+              shippingAddress: { name: data.get("name"), line1: data.get("line1"), line2: data.get("line2"), city: data.get("city"), state: data.get("state"), postalCode: data.get("postalCode"), country: data.get("country"), phone: data.get("phone") },
+            });
+            window.localStorage.setItem("commerce-cart-id", cart.id);
+            window.localStorage.setItem("commerce-order-id", checkout.orderId);
+            window.localStorage.setItem("commerce-order-access-token", checkout.orderAccessToken);
+            window.localStorage.removeItem("commerce-cart-lines");
+            window.location.href = checkout.checkoutUrl;
+          } catch (reason) {
+            if (errorNode) { errorNode.hidden = false; errorNode.textContent = reason instanceof Error ? reason.message : "Unable to start checkout."; }
+            if (statusNode) statusNode.textContent = "";
+          }
+        });
+      })();
+    </script>
+  </div>
+</Base>

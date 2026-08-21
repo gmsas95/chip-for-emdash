@@ -85,7 +85,7 @@ export function createCommerceClient(
       start: (input: CheckoutStartInput) => request<CheckoutResult>("/checkout", "POST", input),
     },
     orders: {
-      get: (orderId: string) => request<OrderSnapshot>("/orders", "POST", { orderId }),
+      get: (orderId: string, orderAccessToken: string) => request<OrderSnapshot>("/order", "POST", { orderId, orderAccessToken }),
     },
   };
 }

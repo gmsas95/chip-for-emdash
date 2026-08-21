@@ -27,6 +27,7 @@ export interface OrderSnapshot extends ContractOrderSnapshot {
   readonly fulfillmentProviderId?: string;
   readonly status?: string;
   readonly createdAt: string;
+  readonly orderAccessToken?: string;
 }
 
 export interface OrderSnapshotLineInput {
@@ -60,6 +61,7 @@ export interface CreateOrderSnapshotInput {
   paymentProviderId?: string;
   fulfillmentProviderId?: string;
   status?: string;
+  orderAccessToken?: string;
   createdAt?: string;
 }
 
@@ -177,6 +179,7 @@ export function createOrderSnapshot(input: CreateOrderSnapshotInput): OrderSnaps
     ...(input.shippingAddress === undefined ? {} : { shippingAddress: clone(input.shippingAddress) }),
     ...(input.metadata === undefined ? {} : { metadata: clone(input.metadata) }),
     ...(input.paymentProviderId === undefined ? {} : { paymentProviderId: input.paymentProviderId }),
+    ...(input.orderAccessToken === undefined ? {} : { orderAccessToken: input.orderAccessToken }),
     ...(input.fulfillmentProviderId === undefined ? {} : { fulfillmentProviderId: input.fulfillmentProviderId }),
     ...(input.status === undefined ? {} : { status: input.status }),
     createdAt: input.createdAt ?? new Date().toISOString(),

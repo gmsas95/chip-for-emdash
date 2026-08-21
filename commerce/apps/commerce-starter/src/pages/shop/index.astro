@@ -1,0 +1,12 @@
+---
+import Base from "../../layouts/Base.astro";
+import ClientCatalog from "../../components/ClientCatalog.astro";
+---
+<Base title="Shop" description="Browse the current collection.">
+  <div class="page-wrap section">
+    <p class="eyebrow">Shop</p>
+    <h1>Find your next favorite.</h1>
+    <p class="lede">Browse the collection and choose what belongs in your everyday.</p>
+    <ClientCatalog id="shop-products" />
+  </div>
+</Base>

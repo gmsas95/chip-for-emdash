@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "pnpm --filter @emdash-commerce/core build && astro build",
     "preview": "astro preview",
-    "deploy": "astro build && wrangler deploy",
+    "deploy": "pnpm run build && wrangler deploy",
     "typecheck": "astro check",
     "test": "vitest run"
   },

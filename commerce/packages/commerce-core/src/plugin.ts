@@ -1,11 +1,18 @@
 import { definePlugin, PluginRouteError } from "emdash";
 import type { PluginDescriptor, ResolvedPlugin, RouteContext } from "emdash";
 import { getCommerceEventSigningData, parseAddressSnapshot } from "@gmsas95/emdash-commerce-contracts";
-import type { CommerceEvent } from "@gmsas95/emdash-commerce-contracts";
+import type { CommerceEvent, CustomerSnapshot } from "@gmsas95/emdash-commerce-contracts";
 import { addCartLine } from "./domain/cart.js";
 import type { Cart } from "./domain/cart.js";
 import { createOrderSnapshot } from "./domain/orders.js";
 import type { OrderSnapshot } from "./domain/orders.js";
+import {
+  catalogRoute,
+  productArchiveRoute,
+  productDetailRoute,
+  productSaveRoute,
+  productsRoute,
+} from "./admin/products-api.js";
 import { createMemoryReplayStore, verifyBridgeSignature } from "./bridge/signature.js";
 import type { BridgeReplayStore } from "./bridge/signature.js";
 import { sendBridgeCommand } from "./bridge/client.js";
@@ -15,7 +22,7 @@ import { createEmDashRepositories } from "./storage/repositories.js";
 import type { CommerceRepositories, EmDashCommerceStorage } from "./storage/repositories.js";
 
 const PLUGIN_ID = "emdash-commerce";
-const PLUGIN_VERSION = "0.1.0";
+const PLUGIN_VERSION = "0.2.0";
 const checkoutLocks = new Map<string, Promise<void>>();
 
 export interface CommercePaymentProvider {
@@ -64,6 +71,40 @@ function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input);
 }
 
+function parseCustomerInput(input: unknown): CustomerSnapshot | undefined {
+  if (input === undefined) return undefined;
+  if (!isRecord(input)) throw new Error("customer must be an object");
+  const customer: CustomerSnapshot = {};
+  for (const key of ["name", "email", "phone"] as const) {
+    const value = input[key];
+    if (value !== undefined && value !== null) {
+      if (typeof value !== "string" || value.trim() === "") throw new Error(`customer.${key} must be a non-empty string`);
+      customer[key] = value.trim();
+    }
+  }
+  if (!customer.name && !customer.email && !customer.phone) throw new Error("customer requires name, email, or phone");
+  return customer;
+}
+
+async function persistCustomer(repositories: CommerceRepositories, input: CustomerSnapshot): Promise<CustomerSnapshot> {
+  const now = new Date().toISOString();
+  const existing = input.email === undefined
+    ? undefined
+    : (await repositories.customers.query({ where: { email: input.email }, limit: 1 })).items[0];
+  const customerId = existing?.id ?? `customer-${crypto.randomUUID()}`;
+  const previous = isRecord(existing?.data) ? existing.data : {};
+  await repositories.customers.put(customerId, {
+    ...previous,
+    ...input,
+    customerId,
+    status: "active",
+    orderCount: typeof previous.orderCount === "number" ? previous.orderCount + 1 : 1,
+    createdAt: typeof previous.createdAt === "string" ? previous.createdAt : now,
+    updatedAt: now,
+  } as never);
+  return { ...input, customerId };
+}
+
 function paymentProviderFor(options: CommercePluginOptions, providerId: string): CommercePaymentProvider | undefined {
   const direct = options.paymentProviders?.[providerId];
   if (direct) {
@@ -94,9 +135,24 @@ function paymentProviderFor(options: CommercePluginOptions, providerId: string):
   };
 }
 
-async function catalogRoute(context: RouteContext): Promise<unknown> {
+
+async function providerStatusRoute(options: CommercePluginOptions, context: RouteContext): Promise<unknown> {
   requireMethod(context, "GET");
-  return context.storage.products?.query({ where: { status: "published" }, limit: 50 });
+  const providerIds = [...new Set([
+    ...Object.keys(options.paymentProviders ?? {}),
+    ...Object.keys(options.paymentBridges ?? {}),
+  ])];
+  return {
+    providers: providerIds.map((id) => ({
+      id,
+      label: id === "chip" ? "CHIP" : id,
+      configured: Boolean(options.paymentProviders?.[id] || options.paymentBridges?.[id]?.sharedSecret),
+      ...(id === "chip" ? {
+        settingsPath: "/_emdash/admin/plugins/chip-for-emdash/settings",
+        paymentsPath: "/_emdash/admin/plugins/chip-for-emdash/payments",
+      } : {}),
+    })),
+  };
 }
 
 async function inventoryRoute(context: RouteContext): Promise<unknown> {
@@ -207,6 +263,7 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
       throw PluginRouteError.conflict("Cart checkout is already in progress");
     }
     const checkoutOrderId = cart.checkoutOrderId ?? `${cartId}-${checkoutKey}`;
+    const orderAccessToken = crypto.randomUUID();
     cart.status = "checkout_pending";
     cart.checkoutKey = checkoutKey;
     cart.checkoutOrderId = checkoutOrderId;
@@ -232,10 +289,14 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
         sku: typeof catalog.sku === "string" ? catalog.sku : line.sku,
       };
     }));
+    const customerInput = parseCustomerInput(body.customer);
+    const customer = customerInput === undefined ? undefined : await persistCustomer(repositories, customerInput);
     order = createOrderSnapshot({
       orderId: checkoutOrderId,
+      orderAccessToken,
       currency: cart.currency,
       lines,
+      customer,
       shippingAddress: body.shippingAddress === undefined ? undefined : parseAddressSnapshot(body.shippingAddress),
     });
   } catch (error) {
@@ -250,6 +311,7 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     const payment = await provider.createPayment({ order, idempotencyKey: checkoutKey });
     const result = {
       orderId: order.id,
+      orderAccessToken: order.orderAccessToken,
       checkoutUrl: payment.checkoutUrl,
       ...(payment.paymentReference === undefined ? {} : { paymentReference: payment.paymentReference }),
       totalMinor: order.totalMinor,
@@ -270,12 +332,27 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
   }
 }
 
+async function publicOrderRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "POST");
+  const body = requestBody(context);
+  if (typeof body.orderId !== "string" || typeof body.orderAccessToken !== "string") {
+    throw PluginRouteError.notFound("Order not found");
+  }
+  const repositories = repositoriesFromContext(context);
+  const order = await repositories.orders.get(body.orderId) as OrderSnapshot | undefined;
+  if (!order || order.orderAccessToken !== body.orderAccessToken) {
+    throw PluginRouteError.notFound("Order not found");
+  }
+  const { orderAccessToken: _orderAccessToken, ...safeOrder } = order;
+  return safeOrder;
+}
 async function ordersRoute(context: RouteContext): Promise<unknown> {
   const repositories = repositoriesFromContext(context);
   if (context.request.method === "GET") {
     return repositories.orders.query({ limit: 50 });
   }
   requireMethod(context, "POST");
+
   const body = requestBody(context);
   if (typeof body.orderId !== "string") {
     throw PluginRouteError.badRequest("orderId is required");
@@ -354,10 +431,16 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
     storage: STORAGE,
     routes: {
       catalog: { public: true, handler: catalogRoute },
+      products: { public: false, handler: productsRoute },
+      "products/detail": { public: false, handler: productDetailRoute },
+      "products/save": { public: false, handler: productSaveRoute },
+      "products/archive": { public: false, handler: productArchiveRoute },
       inventory: { public: false, handler: inventoryRoute },
+      "provider-status": { public: false, handler: (context) => providerStatusRoute(options, context) },
       customers: { public: false, handler: customersRoute },
       cart: { public: true, handler: cartRoute },
       checkout: { public: true, handler: (context) => checkoutRoute(options, context) },
+      order: { public: true, handler: publicOrderRoute },
       orders: { public: false, handler: ordersRoute },
       "bridge/events": { public: true, handler: (context) => bridgeEventsRoute(options, replayStore, context) },
     },

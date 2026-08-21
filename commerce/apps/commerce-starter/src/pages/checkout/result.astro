@@ -1,0 +1,15 @@
+---
+import Base from "../../layouts/Base.astro";
+const status = Astro.url.searchParams.get("status")?.toLowerCase() ?? "pending";
+const title = status === "success" || status === "paid" ? "Payment received" : status === "cancel" || status === "cancelled" ? "Payment cancelled" : status === "failure" || status === "failed" ? "Payment needs attention" : "Payment status";
+const copy = status === "success" || status === "paid" ? "Your payment was confirmed. We are preparing the order record." : status === "cancel" || status === "cancelled" ? "No payment was completed. Your cart is still available." : status === "failure" || status === "failed" ? "The payment did not complete. You can return to checkout and try again." : "We are checking the payment status. Refresh this page if you just returned from CHIP.";
+---
+<Base title={title} description={copy}>
+  <div class="page-wrap section">
+    <p class="eyebrow">Checkout result</p>
+    <h1>{title}</h1>
+    <p class="lede">{copy}</p>
+    <p><a class="button" href={status === "success" || status === "paid" ? "/" : "/checkout"}>{status === "success" || status === "paid" ? "Continue shopping" : "Return to checkout"}</a></p>
+    <p><a href="/orders/">View your order if you have the order ID.</a></p>
+  </div>
+</Base>
