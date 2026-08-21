@@ -326,6 +326,7 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
   } catch (error) {
     cart.status = "active";
     cart.checkoutKey = undefined;
+    cart.checkoutOrderId = undefined;
     await repositories.carts.put(cartId, cart as never);
     throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid checkout");
   }
@@ -482,6 +483,12 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       "bridge/events": { public: true, handler: (context) => bridgeEventsRoute(options, replayStore, context) },
     },
     hooks: {
+      "plugin:install": async (_event, context) => {
+        await context.cron?.schedule("order-access-token-migration", { schedule: "*/5 * * * *" });
+      },
+      "plugin:activate": async (_event, context) => {
+        await context.cron?.schedule("order-access-token-migration", { schedule: "*/5 * * * *" });
+      },
       cron: async (_event, context) => migrateOrderAccessTokens(context),
     },
     admin: {

@@ -34,5 +34,7 @@ describe("Commerce native plugin", () => {
     expect(plugin.routes.products?.public).toBe(false);
     expect(plugin.routes.order?.public).toBe(true);
     expect(plugin.hooks?.cron).toBeDefined();
+    expect(plugin.hooks?.["plugin:install"]).toBeDefined();
+    expect(plugin.hooks?.["plugin:activate"]).toBeDefined();
   });
 });
