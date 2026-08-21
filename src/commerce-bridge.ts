@@ -1,4 +1,3 @@
-import { getBridgeSigningData, getCommerceEventSigningData, parseBridgeRequest } from "@gmsas95/emdash-commerce-contracts";
 import type { BridgeRequest, CommerceEvent } from "@gmsas95/emdash-commerce-contracts";
 import type { PluginContext, RouteHandler } from "emdash/plugin";
 import { signBridgePayload, verifyBridgePayload } from "./bridge/signature.js";
@@ -45,6 +44,47 @@ const createLocks = new Map<string, Promise<void>>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function canonicalize(input: unknown): unknown {
+	if (Array.isArray(input)) return input.map(canonicalize);
+	if (isRecord(input)) {
+		return Object.keys(input).sort().reduce<Record<string, unknown>>((result, key) => {
+			result[key] = canonicalize(input[key]);
+			return result;
+		}, {});
+	}
+	return input;
+}
+
+function getBridgeSigningData(request: BridgeRequest<unknown>): string {
+	return JSON.stringify(canonicalize({
+		contract: request.contract,
+		version: request.version,
+		requestId: request.requestId,
+		idempotencyKey: request.idempotencyKey,
+		sentAt: request.sentAt,
+		auth: {
+			version: request.auth.version,
+			keyId: request.auth.keyId,
+			timestamp: request.auth.timestamp,
+		},
+		payload: request.payload,
+	}));
+}
+
+function getCommerceEventSigningData(event: CommerceEvent<unknown>): string {
+	return JSON.stringify(canonicalize(event));
+}
+
+function parseChargePayload(input: unknown): Record<string, unknown> {
+	if (!isRecord(input) || input.operation !== "charge" || !isRecord(input.order)) throw new Error("Invalid Commerce payment command");
+	const total = input.order.total;
+	if (!isRecord(total) || typeof total.amountMinor !== "number" || !Number.isSafeInteger(total.amountMinor) || total.amountMinor < 0 || typeof total.currency !== "string" || !/^[A-Z]{3}$/.test(total.currency)) {
+		throw new Error("Invalid Commerce order total");
+	}
+	if (!Array.isArray(input.order.items)) throw new Error("Invalid Commerce order items");
+	return input;
 }
 
 function response<T>(requestId: string, data: T): Record<string, unknown> {
@@ -182,8 +222,7 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 		if (auth.request.contract !== "commerce.payment.create") return failure(auth.request.requestId, "UNSUPPORTED_CONTRACT", "Unsupported Commerce payment contract", false);
 		let payload: Record<string, unknown>;
 		try {
-			const parsed = parseBridgeRequest(auth.request as unknown);
-			payload = (parsed.payload as unknown as Record<string, unknown>);
+			payload = parseChargePayload(auth.request.payload);
 		} catch {
 			return failure(auth.request.requestId, "INVALID_PAYLOAD", "Invalid Commerce payment command", false);
 		}
