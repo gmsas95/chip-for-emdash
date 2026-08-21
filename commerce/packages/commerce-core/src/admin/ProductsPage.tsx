@@ -48,9 +48,8 @@ function draftFromAggregate(aggregate: ProductAggregate): ProductEditorDraft {
     })),
   };
 }
-
 function emptyVariant(): VariantEditorDraft {
-  return { name: "", sku: "", status: "draft", priceMinor: "", currency: "MYR", optionsText: "" };
+  return { id: crypto.randomUUID(), name: "", sku: "", status: "draft", priceMinor: "", currency: "MYR", optionsText: "" };
 }
 
 function emptyInventory(variantId?: string): InventoryEditorDraft {
@@ -191,6 +190,7 @@ export function ProductsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
                   <legend>{variant.name || `Variant ${index + 1}`}</legend>
                   <label>Name <input required value={variant.name} onChange={(event) => setEditor({ ...editor, variants: editor.variants.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} /></label>
                   <label>SKU <input required value={variant.sku} onChange={(event) => setEditor({ ...editor, variants: editor.variants.map((item, itemIndex) => itemIndex === index ? { ...item, sku: event.target.value } : item) })} /></label>
+                  <label>Status <select value={variant.status} onChange={(event) => setEditor({ ...editor, variants: editor.variants.map((item, itemIndex) => itemIndex === index ? { ...item, status: event.target.value as VariantEditorDraft["status"] } : item) })}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
                   <label>Price <input required inputMode="decimal" value={variant.priceMinor} onChange={(event) => setEditor({ ...editor, variants: editor.variants.map((item, itemIndex) => itemIndex === index ? { ...item, priceMinor: event.target.value } : item) })} /></label>
                   <label>Options <textarea placeholder={"size=Large\ncolor=Red"} value={variant.optionsText} onChange={(event) => setEditor({ ...editor, variants: editor.variants.map((item, itemIndex) => itemIndex === index ? { ...item, optionsText: event.target.value } : item) })} /></label>
                   <button type="button" onClick={() => setEditor({ ...editor, variants: editor.variants.filter((_, itemIndex) => itemIndex !== index), inventory: editor.inventory.filter((item) => item.variantId !== variant.id) })}>Remove variant</button>

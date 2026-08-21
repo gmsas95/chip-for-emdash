@@ -33,7 +33,7 @@ const { slug } = Astro.props;
           label.append(select); details.append(label);
           selectedVariant = (() => { const first = product.variants[0]; return () => product.variants.find((variant) => variant.id === select.value) || first; })();
         }
-        const initialVariant = product.variants?.[0]; price.textContent = format(initialVariant?.priceMinor ?? product.priceMinor ?? 0, initialVariant?.currency || product.currency);
+        const initialVariant = product.hasVariants ? product.variants?.[0] : undefined; price.textContent = format(initialVariant?.priceMinor ?? product.priceMinor ?? 0, initialVariant?.currency || product.currency);
         const quantityLabel = document.createElement("label"); quantityLabel.textContent = "Quantity"; const quantity = document.createElement("input"); quantity.type = "number"; quantity.min = "1"; quantity.max = "99"; quantity.value = "1"; quantityLabel.append(quantity);
         const add = document.createElement("button"); add.type = "button"; add.textContent = "Add to cart"; const feedback = document.createElement("p"); feedback.setAttribute("role", "status");
         add.addEventListener("click", () => { const variant = selectedVariant ? selectedVariant() : undefined; const lines = JSON.parse(window.localStorage.getItem("commerce-cart-lines") || "[]"); lines.push({ productId: item.id, ...(variant ? { variantId: variant.id } : {}), quantity: Math.max(1, Math.min(99, Number(quantity.value) || 1)) }); window.localStorage.setItem("commerce-cart-lines", JSON.stringify(lines)); feedback.textContent = "Added to cart."; });

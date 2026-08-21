@@ -1,5 +1,5 @@
 import { definePlugin, PluginRouteError } from "emdash";
-import type { PluginDescriptor, ResolvedPlugin, RouteContext } from "emdash";
+import type { PluginContext, PluginDescriptor, ResolvedPlugin, RouteContext } from "emdash";
 import { getCommerceEventSigningData, parseAddressSnapshot } from "@gmsas95/emdash-commerce-contracts";
 import type { CommerceEvent, CustomerSnapshot } from "@gmsas95/emdash-commerce-contracts";
 import { addCartLine } from "./domain/cart.js";
@@ -86,23 +86,38 @@ function parseCustomerInput(input: unknown): CustomerSnapshot | undefined {
   return customer;
 }
 
-async function persistCustomer(repositories: CommerceRepositories, input: CustomerSnapshot): Promise<CustomerSnapshot> {
-  const now = new Date().toISOString();
+function withoutUndefined<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
+}
+
+interface PreparedCustomer {
+  snapshot: CustomerSnapshot;
+  id: string;
+  previous: Record<string, unknown>;
+}
+
+async function prepareCustomer(repositories: CommerceRepositories, input: CustomerSnapshot): Promise<PreparedCustomer> {
   const existing = input.email === undefined
     ? undefined
     : (await repositories.customers.query({ where: { email: input.email }, limit: 1 })).items[0];
-  const customerId = existing?.id ?? `customer-${crypto.randomUUID()}`;
-  const previous = isRecord(existing?.data) ? existing.data : {};
-  await repositories.customers.put(customerId, {
-    ...previous,
-    ...input,
-    customerId,
+  const id = existing?.id ?? `customer-${crypto.randomUUID()}`;
+  return {
+    snapshot: { ...input, customerId: id },
+    id,
+    previous: isRecord(existing?.data) ? existing.data : {},
+  };
+}
+
+async function persistCustomer(repositories: CommerceRepositories, prepared: PreparedCustomer): Promise<void> {
+  const now = new Date().toISOString();
+  await repositories.customers.put(prepared.id, {
+    ...prepared.previous,
+    ...prepared.snapshot,
     status: "active",
-    orderCount: typeof previous.orderCount === "number" ? previous.orderCount + 1 : 1,
-    createdAt: typeof previous.createdAt === "string" ? previous.createdAt : now,
+    orderCount: typeof prepared.previous.orderCount === "number" ? prepared.previous.orderCount + 1 : 1,
+    createdAt: typeof prepared.previous.createdAt === "string" ? prepared.previous.createdAt : now,
     updatedAt: now,
   } as never);
-  return { ...input, customerId };
 }
 
 function paymentProviderFor(options: CommercePluginOptions, providerId: string): CommercePaymentProvider | undefined {
@@ -165,6 +180,11 @@ async function customersRoute(context: RouteContext): Promise<unknown> {
   return context.storage.customers?.query({ limit: 50 });
 }
 
+function publicCart(cart: Cart): Omit<Cart, "checkoutKey" | "checkoutOrderId" | "checkoutResult"> {
+  const { checkoutKey: _checkoutKey, checkoutOrderId: _checkoutOrderId, checkoutResult: _checkoutResult, ...safeCart } = cart;
+  return safeCart;
+}
+
 async function cartRoute(context: RouteContext): Promise<unknown> {
   requireMethod(context, "POST");
   const body = requestBody(context);
@@ -217,7 +237,7 @@ async function cartRoute(context: RouteContext): Promise<unknown> {
     }
   }
   await repositories.carts.put(cartId, cart as never);
-  return cart;
+  return publicCart(cart);
 }
 
 async function checkoutRoute(options: CommercePluginOptions, context: RouteContext): Promise<unknown> {
@@ -254,10 +274,12 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
       throw PluginRouteError.notFound("Cart not found");
     }
     if (cart.status === "checked_out") {
-      if (cart.checkoutKey !== checkoutKey || !cart.checkoutResult) {
+      if (cart.checkoutKey !== checkoutKey || !cart.checkoutResult || !cart.checkoutOrderId) {
         throw PluginRouteError.conflict("Cart has already been checked out");
       }
-      return cart.checkoutResult;
+      const completedOrder = await repositories.orders.get(cart.checkoutOrderId) as OrderSnapshot | undefined;
+      if (!completedOrder?.orderAccessToken) throw PluginRouteError.conflict("Completed order access token is unavailable");
+      return { ...cart.checkoutResult, orderAccessToken: completedOrder.orderAccessToken };
     }
     if (cart.status === "checkout_pending" && cart.checkoutKey !== checkoutKey) {
       throw PluginRouteError.conflict("Cart checkout is already in progress");
@@ -269,6 +291,7 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     cart.checkoutOrderId = checkoutOrderId;
     await repositories.carts.put(cartId, cart as never);
   let order;
+  let preparedCustomer: PreparedCustomer | undefined;
   try {
     const lines = await Promise.all(cart.lines.map(async (line) => {
       const product = await repositories.products.get(line.productId) as unknown as Record<string, unknown> | undefined;
@@ -290,14 +313,15 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
       };
     }));
     const customerInput = parseCustomerInput(body.customer);
-    const customer = customerInput === undefined ? undefined : await persistCustomer(repositories, customerInput);
+    preparedCustomer = customerInput === undefined ? undefined : await prepareCustomer(repositories, customerInput);
+    const customer = preparedCustomer?.snapshot;
     order = createOrderSnapshot({
       orderId: checkoutOrderId,
       orderAccessToken,
       currency: cart.currency,
       lines,
       customer,
-      shippingAddress: body.shippingAddress === undefined ? undefined : parseAddressSnapshot(body.shippingAddress),
+      shippingAddress: body.shippingAddress === undefined ? undefined : withoutUndefined(parseAddressSnapshot(body.shippingAddress)),
     });
   } catch (error) {
     cart.status = "active";
@@ -309,18 +333,18 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
   await repositories.orders.put(order.id, order);
   try {
     const payment = await provider.createPayment({ order, idempotencyKey: checkoutKey });
-    const result = {
+    const storedResult = {
       orderId: order.id,
-      orderAccessToken: order.orderAccessToken,
       checkoutUrl: payment.checkoutUrl,
       ...(payment.paymentReference === undefined ? {} : { paymentReference: payment.paymentReference }),
       totalMinor: order.totalMinor,
       currency: order.currency,
     };
+    if (preparedCustomer) await persistCustomer(repositories, preparedCustomer);
     cart.status = "checked_out";
-    cart.checkoutResult = result;
+    cart.checkoutResult = storedResult;
     await repositories.carts.put(cartId, cart as never);
-    return result;
+    return { ...storedResult, orderAccessToken: order.orderAccessToken };
   } catch (error) {
     throw new PluginRouteError("PAYMENT_PROVIDER_ERROR", "Payment provider failed", 502);
   }
@@ -410,6 +434,19 @@ async function bridgeEventsRoute(
   return { ok: true, duplicate: false, deliveryId, eventId };
 }
 
+async function migrateOrderAccessTokens(ctx: PluginContext): Promise<void> {
+  let cursor: string | undefined;
+  do {
+    const page = await ctx.storage.orders?.query({ limit: 100, ...(cursor === undefined ? {} : { cursor }) });
+    if (!page) return;
+    for (const { id, data } of page.items) {
+      if (!isRecord(data) || typeof data.orderAccessToken === "string") continue;
+      await ctx.storage.orders?.put(id, { ...data, orderAccessToken: crypto.randomUUID() });
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor !== undefined);
+}
+
 export function commercePlugin(options: CommercePluginDescriptorOptions = {}): PluginDescriptor<CommercePluginDescriptorOptions> {
   return {
     id: PLUGIN_ID,
@@ -443,6 +480,9 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       order: { public: true, handler: publicOrderRoute },
       orders: { public: false, handler: ordersRoute },
       "bridge/events": { public: true, handler: (context) => bridgeEventsRoute(options, replayStore, context) },
+    },
+    hooks: {
+      cron: async (_event, context) => migrateOrderAccessTokens(context),
     },
     admin: {
       entry: "@emdash-commerce/core/admin",

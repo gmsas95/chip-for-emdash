@@ -123,4 +123,34 @@ describe("Commerce persisted product administration", () => {
     expect(await repositories.products.get("product-1")).toMatchObject({ status: "archived" });
     expect(await plugin.routes.catalog.handler(context(storage, undefined, "GET"))).toMatchObject({ items: [] });
   });
+  it("rejects a variant id owned by another product", async () => {
+    const repositories = createMemoryRepositories();
+    const plugin = createPlugin({});
+    const storage = storageFrom(repositories);
+    await plugin.routes["products/save"].handler(context(storage, {
+      product: { id: "product-a", name: "A", slug: "a", description: "", status: "draft", priceMinor: 100, currency: "MYR", images: [], hasVariants: true },
+      variants: [{ id: "variant-a", name: "A", sku: "A-1", status: "draft", priceMinor: 100, currency: "MYR", options: {} }],
+      inventory: [],
+    }));
+
+    await expect(plugin.routes["products/save"].handler(context(storage, {
+      product: { id: "product-b", name: "B", slug: "b", description: "", status: "draft", priceMinor: 100, currency: "MYR", images: [], hasVariants: true },
+      variants: [{ id: "variant-a", name: "Overwrite", sku: "B-1", status: "draft", priceMinor: 200, currency: "MYR", options: {} }],
+      inventory: [],
+    }))).rejects.toThrow(/belongs to another product/);
+    expect(await repositories.variants.get("variant-a")).toMatchObject({ productId: "product-a", sku: "A-1" });
+  });
+
+  it("validates child records before persisting the parent", async () => {
+    const repositories = createMemoryRepositories();
+    const plugin = createPlugin({});
+    const storage = storageFrom(repositories);
+
+    await expect(plugin.routes["products/save"].handler(context(storage, {
+      product: { id: "product-invalid", name: "Invalid", slug: "invalid", description: "", status: "published", priceMinor: 100, currency: "MYR", images: [], hasVariants: true },
+      variants: [{ name: "Broken", sku: "BROKEN", status: "draft", priceMinor: -1, currency: "MYR", options: {} }],
+      inventory: [],
+    }))).rejects.toThrow(/priceMinor/);
+    expect(await repositories.products.get("product-invalid")).toBeUndefined();
+  });
 });

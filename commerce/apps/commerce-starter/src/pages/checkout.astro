@@ -55,13 +55,21 @@ import Base from "../layouts/Base.astro";
               cartId: cart.id,
               paymentProvider: "chip",
               idempotencyKey: crypto.randomUUID(),
-              customer: { name: data.get("name"), email: data.get("email"), phone: data.get("phone") },
-              shippingAddress: { name: data.get("name"), line1: data.get("line1"), line2: data.get("line2"), city: data.get("city"), state: data.get("state"), postalCode: data.get("postalCode"), country: data.get("country"), phone: data.get("phone") },
+              customer: { name: String(data.get("name") ?? "").trim(), email: String(data.get("email") ?? "").trim(), ...(String(data.get("phone") ?? "").trim() ? { phone: String(data.get("phone") ?? "").trim() } : {}) },
+              shippingAddress: {
+                name: String(data.get("name") ?? "").trim(),
+                line1: String(data.get("line1") ?? "").trim(),
+                city: String(data.get("city") ?? "").trim(),
+                postalCode: String(data.get("postalCode") ?? "").trim(),
+                country: String(data.get("country") ?? "").trim(),
+                ...(String(data.get("line2") ?? "").trim() ? { line2: String(data.get("line2") ?? "").trim() } : {}),
+                ...(String(data.get("state") ?? "").trim() ? { state: String(data.get("state") ?? "").trim() } : {}),
+                ...(String(data.get("phone") ?? "").trim() ? { phone: String(data.get("phone") ?? "").trim() } : {}),
+              },
             });
             window.localStorage.setItem("commerce-cart-id", cart.id);
             window.localStorage.setItem("commerce-order-id", checkout.orderId);
             window.localStorage.setItem("commerce-order-access-token", checkout.orderAccessToken);
-            window.localStorage.removeItem("commerce-cart-lines");
             window.location.href = checkout.checkoutUrl;
           } catch (reason) {
             if (errorNode) { errorNode.hidden = false; errorNode.textContent = reason instanceof Error ? reason.message : "Unable to start checkout."; }

@@ -17,7 +17,7 @@ const { id, limit = 50 } = Astro.props;
         const productImage = document.createElement("img"); productImage.src = image(product.data.images?.[0]?.url); productImage.alt = product.data.images?.[0]?.alt || product.data.name; productImage.loading = "lazy";
         const body = document.createElement("div"); body.className = "product-card-body";
         const title = document.createElement("h3"); title.textContent = product.data.name;
-        const amount = document.createElement("p"); const firstVariant = product.data.variants?.[0]; amount.textContent = format(firstVariant?.priceMinor ?? product.data.priceMinor ?? 0, firstVariant?.currency || product.data.currency);
+        const amount = document.createElement("p"); const firstVariant = product.data.hasVariants ? product.data.variants?.[0] : undefined; amount.textContent = format(firstVariant?.priceMinor ?? product.data.priceMinor ?? 0, firstVariant?.currency || product.data.currency);
         body.append(title, amount); link.append(productImage, body); root.append(link);
       }
     };
