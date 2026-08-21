@@ -3,7 +3,7 @@ import { formatMinorAmount, imageUrl, type CatalogProduct } from "../lib/commerc
 interface Props { product: CatalogProduct; }
 const { product } = Astro.props;
 const image = product.images[0];
-const price = product.priceMinor ?? product.variants[0]?.priceMinor ?? 0;
+const price = product.hasVariants ? product.variants[0]?.priceMinor ?? 0 : product.priceMinor ?? 0;
 ---
 <a class="product-card" href={`/shop/${product.slug}`}>
   <img src={imageUrl(image?.url)} alt={image?.alt || product.name} loading="lazy" />
