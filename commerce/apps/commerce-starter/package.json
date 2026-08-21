@@ -1,0 +1,33 @@
+{
+  "name": "@gmsas95/emdash-commerce-starter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "deploy": "astro build && wrangler deploy",
+    "typecheck": "astro check",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.2.3",
+    "@astrojs/react": "^6.0.4",
+    "@chip-in-asia/plugin-chip-for-emdash": "github:gmsas95/chip-for-emdash#main",
+    "@emdash-commerce/core": "workspace:*",
+    "@gmsas95/emdash-commerce-contracts": "workspace:*",
+    "@emdash-cms/cloudflare": "^0.34.0",
+    "astro": "^7.2.4",
+    "emdash": "^0.34.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@cloudflare/workers-types": "^4.20260301.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.125.0"
+  }
+}
