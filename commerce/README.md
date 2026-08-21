@@ -21,7 +21,7 @@ Provider-specific credentials, response payloads, and diagnostics remain owned b
 
 ## Packages
 
-- `@emdash-commerce/contracts` — versioned domain, money, provider, event, and bridge contracts.
+- `@gmsas95/emdash-commerce-contracts` — versioned domain, money, provider, event, and bridge contracts for EmDash.
 - `@emdash-commerce/core` — native EmDash plugin, repositories, domain workflows, provider bridge, admin pages, and storefront client.
 - `@emdash-commerce/test-fixtures` — reserved workspace package for shared provider fixtures.
 
