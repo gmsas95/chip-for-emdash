@@ -14,11 +14,10 @@
 	"security": { "url": "https://github.com/CHIPAsia/chip-for-emdash/security/advisories/new" },
 	"description": "Accept CHIP payments (FPX, e-wallet, card, DuitNow QR) on any EmDash site via CHIP's hosted checkout.",
 
-	// Trust contract — outbound HTTP is restricted to the CHIP Collect
-	// API host only. Declares the `payments` storage collection where
-	// each payment attempt is recorded.
-	"capabilities": ["network:request"],
-	"allowedHosts": ["gate.chip-in.asia"],
+	// The Commerce bridge sends normalized payment events to the customer-configured
+	// Commerce Core endpoint. Unrestricted network access is explicit installation
+	// consent; keep this plugin trusted or review the outbound-host policy carefully.
+	"capabilities": ["network:request:unrestricted"],
 
 	"storage": {
 		"payments": { "indexes": ["status", "reference", "purchaseId", "returnToken", "createdAt", "commerceOrderId", "commercePaymentId", "idempotencyKey"], "uniqueIndexes": ["idempotencyKey"] },

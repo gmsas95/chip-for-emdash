@@ -1,6 +1,6 @@
 {
 	"name": "@chip-in-asia/plugin-chip-for-emdash",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Accept CHIP payments on EmDash sites through a hosted checkout and optional Commerce bridge integration.",
 	"type": "module",
 	"main": "dist/index.mjs",
