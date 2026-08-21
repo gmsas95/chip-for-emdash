@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getBridgeSigningData } from "@emdash-commerce/contracts";
+import { getBridgeSigningData } from "@gmsas95/emdash-commerce-contracts";
 import { signBridgePayload } from "../../src/bridge/signature.js";
 import chipPlugin from "../../src/plugin.js";
 

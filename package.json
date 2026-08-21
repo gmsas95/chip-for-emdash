@@ -31,7 +31,7 @@
 		"prepare": "npm run build"
 	},
 	"dependencies": {
-		"@emdash-commerce/contracts": "^0.1.0"
+		"@gmsas95/emdash-commerce-contracts": "^0.1.2"
 	},
 	"peerDependencies": {
 		"emdash": ">=0.15.0"

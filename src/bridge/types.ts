@@ -4,7 +4,7 @@ import type {
 	CommerceEvent,
 	LogisticsCommand,
 	PaymentCommand,
-} from "@emdash-commerce/contracts";
+} from "@gmsas95/emdash-commerce-contracts";
 
 export type ChipBridgeRequest<T> = BridgeRequest<T>;
 export type ChipBridgeResponse<T> = BridgeResponse<T>;
