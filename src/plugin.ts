@@ -25,6 +25,8 @@
  * signature verification without a settings migration.
  */
 
+import { createCommerceBridgeRoutes, emitCommerceEvent } from "./commerce-bridge.js";
+import { signBridgePayload } from "./bridge/signature.js";
 import type { PluginContext, RouteHandler, SandboxedPlugin, SandboxedRouteContext } from "emdash/plugin";
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -44,40 +46,32 @@ const SETTINGS_KEYS = {
 	successUrl: "settings:successUrl",
 	failureUrl: "settings:failureUrl",
 	cancelUrl: "settings:cancelUrl",
+	commerceBridgeSecret: "settings:commerceBridgeSecret",
+	commerceEventUrl: "settings:commerceEventUrl",
 } as const;
 
 /** Statuses the plugin persists. PRD §4.5's five-status model, extended with `refunded` (CHIP-dashboard refunds are a real merchant flow; see README "Refunds"). */
-type PaymentStatus = "created" | "paid" | "failed" | "cancelled" | "hold" | "refunded";
+type PaymentStatus = "creating" | "created" | "paid" | "failed" | "cancelled" | "hold" | "refunded";
 
 interface PaymentRecord {
-	/** Plugin-generated record id. */
 	id: string;
-	/** CHIP purchase id (the lookup key for verify-by-query). */
 	purchaseId: string;
-	/**
-	 * Unguessable token embedded in the CHIP redirect/callback URLs at
-	 * create time. CHIP does not append the purchase id to redirect
-	 * URLs, so the browser return route looks the record up by this
-	 * token instead.
-	 */
 	returnToken: string;
-	/** The site's own order/product reference. */
 	reference: string;
-	/** Amount in cents. */
 	amount: number;
 	currency: string;
 	status: PaymentStatus;
 	productName: string;
 	clientEmail?: string;
-	/** Passthrough for the site. */
 	metadata?: Record<string, unknown>;
 	checkoutUrl?: string;
-	/** ISO timestamp of the CHIP-confirmed `paid_on`, if known. */
 	paidOn?: string;
+	commerceOrderId?: string;
+	commercePaymentId?: string;
+	idempotencyKey?: string;
 	createdAt: string;
 	updatedAt: string;
 }
-
 interface PluginSettings {
 	secretKey: string | undefined;
 	brandId: string;
@@ -85,6 +79,8 @@ interface PluginSettings {
 	successUrl: string;
 	failureUrl: string;
 	cancelUrl: string;
+	commerceBridgeSecret: string | undefined;
+	commerceEventUrl: string;
 }
 
 interface ChipResult {
@@ -171,6 +167,12 @@ function asPaymentRecord(value: unknown): PaymentRecord | null {
 	if (checkoutUrl) record.checkoutUrl = checkoutUrl;
 	const paidOn = getString(value, "paidOn");
 	if (paidOn) record.paidOn = paidOn;
+	const commerceOrderId = getString(value, "commerceOrderId");
+	if (commerceOrderId) record.commerceOrderId = commerceOrderId;
+	const commercePaymentId = getString(value, "commercePaymentId");
+	if (commercePaymentId) record.commercePaymentId = commercePaymentId;
+	const idempotencyKey = getString(value, "idempotencyKey");
+	if (idempotencyKey) record.idempotencyKey = idempotencyKey;
 	return record;
 }
 
@@ -191,13 +193,15 @@ function clampLimit(value: number | undefined): number {
 // ── Settings ─────────────────────────────────────────────────────────────
 
 async function loadSettings(ctx: PluginContext): Promise<PluginSettings> {
-	const [secretKey, brandId, publicKey, successUrl, failureUrl, cancelUrl] = await Promise.all([
+	const [secretKey, brandId, publicKey, successUrl, failureUrl, cancelUrl, commerceBridgeSecret, commerceEventUrl] = await Promise.all([
 		ctx.kv.get<string>(SETTINGS_KEYS.secretKey),
 		ctx.kv.get<string>(SETTINGS_KEYS.brandId),
 		ctx.kv.get<string>(SETTINGS_KEYS.publicKey),
 		ctx.kv.get<string>(SETTINGS_KEYS.successUrl),
 		ctx.kv.get<string>(SETTINGS_KEYS.failureUrl),
 		ctx.kv.get<string>(SETTINGS_KEYS.cancelUrl),
+		ctx.kv.get<string>(SETTINGS_KEYS.commerceBridgeSecret),
+		ctx.kv.get<string>(SETTINGS_KEYS.commerceEventUrl),
 	]);
 	return {
 		secretKey: secretKey ?? undefined,
@@ -206,6 +210,8 @@ async function loadSettings(ctx: PluginContext): Promise<PluginSettings> {
 		successUrl: successUrl ?? "",
 		failureUrl: failureUrl ?? "",
 		cancelUrl: cancelUrl ?? "",
+		commerceBridgeSecret: commerceBridgeSecret ?? undefined,
+		commerceEventUrl: commerceEventUrl ?? "",
 	};
 }
 
@@ -268,18 +274,18 @@ function chipErrorMessage(result: Pick<ChipResult, "status" | "data">): string {
 async function createChipPurchase(
 	ctx: PluginContext,
 	payload: Record<string, unknown>,
-): Promise<{ purchase?: Record<string, unknown>; error?: string }> {
+): Promise<{ purchase?: Record<string, unknown>; error?: string; retryable?: boolean }> {
 	const result = await chipRequest(ctx, "POST", "/purchases/", payload);
-	if (!result.ok) return { error: chipErrorMessage(result) };
+	if (!result.ok) return { error: chipErrorMessage(result), retryable: result.status >= 500 || result.status === 429 };
 	return { purchase: isRecord(result.data) ? result.data : undefined };
 }
 
 async function getChipPurchase(
 	ctx: PluginContext,
 	purchaseId: string,
-): Promise<{ purchase?: Record<string, unknown>; error?: string }> {
+): Promise<{ purchase?: Record<string, unknown>; error?: string; retryable?: boolean }> {
 	const result = await chipRequest(ctx, "GET", `/purchases/${encodeURIComponent(purchaseId)}/`);
-	if (!result.ok) return { error: chipErrorMessage(result) };
+	if (!result.ok) return { error: chipErrorMessage(result), retryable: result.status >= 500 || result.status === 429 };
 	return { purchase: isRecord(result.data) ? result.data : undefined };
 }
 
@@ -400,6 +406,7 @@ async function updatePaymentStatus(
 		updatedAt: new Date().toISOString(),
 	};
 	await ctx.storage.payments!.put(entry.id, updated);
+	entry.data = updated;
 	ctx.log.info(`CHIP payment ${entry.data.reference} (${entry.data.purchaseId}) → ${status}`);
 }
 
@@ -639,7 +646,14 @@ const returnHandler: RouteHandler = async (routeCtx, ctx) => {
 	}
 
 	const status = normalizeStatus(getString(purchase, "status"));
-	if (status) await updatePaymentStatus(ctx, entry, status, paidOnOf(purchase));
+	if (status) {
+		await updatePaymentStatus(ctx, entry, status, paidOnOf(purchase));
+		try {
+			await emitCommerceEvent(ctx, await loadSettings(ctx), `commerce.payment.${status === "hold" ? "created" : status}`, { ...entry.data, status: status === "hold" ? "created" : status });
+		} catch (error) {
+			ctx.log.error("Failed to emit Commerce payment event", error);
+		}
+	}
 
 	const redirectTo =
 		status === "paid"
@@ -690,7 +704,14 @@ const callbackHandler: RouteHandler = async (routeCtx, ctx) => {
 		}
 
 		const status = normalizeStatus(getString(verified.purchase, "status"));
-		if (status) await updatePaymentStatus(ctx, entry, status, paidOnOf(verified.purchase));
+		if (status) {
+			await updatePaymentStatus(ctx, entry, status, paidOnOf(verified.purchase));
+			try {
+				await emitCommerceEvent(ctx, await loadSettings(ctx), `commerce.payment.${status === "hold" ? "created" : status}`, { ...entry.data, status: status === "hold" ? "created" : status });
+			} catch (error) {
+				ctx.log.error("Failed to emit Commerce payment event", error);
+			}
+		}
 		return { ok: true };
 	} catch (error) {
 		// Never fail a webhook response — CHIP retries non-2xx and storms the site.
@@ -748,6 +769,8 @@ const settingsHandler: RouteHandler = async (_routeCtx, ctx) => {
 		settings: {
 			// The secret key itself is never returned — only whether it is set.
 			secretKeySet: !!settings.secretKey,
+			commerceBridgeSecretSet: !!settings.commerceBridgeSecret,
+			commerceEventUrl: settings.commerceEventUrl,
 			brandId: settings.brandId,
 			publicKey: settings.publicKey,
 			successUrl: settings.successUrl,
@@ -766,7 +789,10 @@ const settingsSaveHandler: RouteHandler = async (routeCtx, ctx) => {
 		if (typeof input.secretKey === "string" && input.secretKey !== "") {
 			await ctx.kv.set(SETTINGS_KEYS.secretKey, input.secretKey);
 		}
-		for (const key of ["brandId", "publicKey", "successUrl", "failureUrl", "cancelUrl"] as const) {
+		if (typeof input.commerceBridgeSecret === "string" && input.commerceBridgeSecret !== "") {
+			await ctx.kv.set(SETTINGS_KEYS.commerceBridgeSecret, input.commerceBridgeSecret);
+		}
+		for (const key of ["brandId", "publicKey", "successUrl", "failureUrl", "cancelUrl", "commerceEventUrl"] as const) {
 			if (typeof input[key] === "string") await ctx.kv.set(SETTINGS_KEYS[key], input[key]);
 		}
 		return { ok: true };
@@ -804,7 +830,48 @@ const adminHandler: RouteHandler = async (routeCtx, ctx) => {
 
 // ── Plugin definition ────────────────────────────────────────────────────
 
+const commerceBridgeRoutes = createCommerceBridgeRoutes({
+	loadSettings,
+	createChipPurchase,
+	getChipPurchase,
+	normalizeStatus,
+	paidOnOf,
+});
+async function retryCommerceEvents(ctx: PluginContext): Promise<void> {
+	const now = Date.now();
+	const pending = await ctx.storage.commerce_events?.query({ where: { status: "pending" }, limit: 50 });
+	for (const item of pending?.items ?? []) {
+		const record = item.data as Record<string, unknown>;
+		const nextAttemptAt = typeof record.nextAttemptAt === "string" ? Date.parse(record.nextAttemptAt) : 0;
+		if (!ctx.http || typeof record.eventUrl !== "string" || typeof record.body !== "string") continue;
+		let timestamp = typeof record.timestamp === "string" ? record.timestamp : new Date().toISOString();
+		let signature = typeof record.signature === "string" ? record.signature : "";
+		const settings = await loadSettings(ctx);
+		if (settings.commerceBridgeSecret) {
+			timestamp = new Date().toISOString();
+			signature = await signBridgePayload(settings.commerceBridgeSecret, timestamp, record.body);
+		}
+		try {
+			const response = await ctx.http.fetch(record.eventUrl, {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					"x-emdash-provider-id": "chip",
+					"x-emdash-bridge-signature": signature,
+					"x-emdash-bridge-timestamp": timestamp,
+				},
+				body: record.body,
+			});
+			const attempts = typeof record.attempts === "number" ? record.attempts + 1 : 1;
+			await ctx.storage.commerce_events?.put(item.id, response.ok ? { ...record, status: "delivered", attempts } : { ...record, status: "pending", attempts, nextAttemptAt: new Date(now + 60_000).toISOString() });
+		} catch {
+			const attempts = typeof record.attempts === "number" ? record.attempts + 1 : 1;
+			await ctx.storage.commerce_events?.put(item.id, { ...record, status: "pending", attempts, nextAttemptAt: new Date(now + 60_000).toISOString() });
+		}
+	}
+}
 export default {
+	hooks: { cron: async (_event, ctx) => retryCommerceEvents(ctx) },
 	routes: {
 		create: { public: true, handler: createHandler },
 		return: { public: true, handler: returnHandler },
@@ -813,6 +880,7 @@ export default {
 		"payments/detail": { handler: paymentDetailHandler },
 		settings: { handler: settingsHandler },
 		"settings/save": { handler: settingsSaveHandler },
+		...commerceBridgeRoutes,
 		admin: { handler: adminHandler },
 	},
 } satisfies SandboxedPlugin;
@@ -876,6 +944,20 @@ async function buildSettingsPage(ctx: PluginContext) {
 							placeholder: "https://yoursite.com/checkout",
 							initial_value: settings.cancelUrl,
 						},
+						{
+							type: "secret_input",
+							action_id: "commerceBridgeSecret",
+							label: "Commerce Bridge Secret (optional)",
+							has_value: !!settings.commerceBridgeSecret,
+							placeholder: "Shared HMAC secret",
+						},
+						{
+							type: "text_input",
+							action_id: "commerceEventUrl",
+							label: "Commerce Event URL (optional)",
+							placeholder: "https://store.example.com/_emdash/api/plugins/emdash-commerce/bridge/events",
+							initial_value: settings.commerceEventUrl,
+						},
 					],
 					submit: { label: "Save Settings", action_id: "save_settings" },
 				},
@@ -917,7 +999,10 @@ async function saveSettingsInteraction(ctx: PluginContext, values: Record<string
 		if (typeof values.secretKey === "string" && values.secretKey !== "") {
 			await ctx.kv.set(SETTINGS_KEYS.secretKey, values.secretKey);
 		}
-		for (const key of ["brandId", "publicKey", "successUrl", "failureUrl", "cancelUrl"] as const) {
+		if (typeof values.commerceBridgeSecret === "string" && values.commerceBridgeSecret !== "") {
+			await ctx.kv.set(SETTINGS_KEYS.commerceBridgeSecret, values.commerceBridgeSecret);
+		}
+		for (const key of ["brandId", "publicKey", "successUrl", "failureUrl", "cancelUrl", "commerceEventUrl"] as const) {
 			if (typeof values[key] === "string") await ctx.kv.set(SETTINGS_KEYS[key], values[key]);
 		}
 		return {

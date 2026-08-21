@@ -1,7 +1,7 @@
 {
 	"name": "@chip-in-asia/plugin-chip-for-emdash",
 	"version": "0.1.0",
-	"description": "Accept CHIP payments (FPX, e-wallet, card, DuitNow QR) on any EmDash site via CHIP's hosted checkout.",
+	"description": "Accept CHIP payments on EmDash sites through a hosted checkout and optional Commerce bridge integration.",
 	"type": "module",
 	"main": "dist/index.mjs",
 	"exports": {
@@ -17,17 +17,7 @@
 		"README.md",
 		"LICENSE"
 	],
-	"keywords": [
-		"emdash",
-		"cms",
-		"plugin",
-		"payments",
-		"chip",
-		"checkout",
-		"fpx",
-		"duitnow",
-		"ewallet"
-	],
+	"keywords": ["emdash", "plugin", "payments", "checkout", "chip"],
 	"author": {
 		"name": "CHIP Asia",
 		"url": "https://chip-in.asia"
@@ -37,7 +27,11 @@
 		"build": "emdash-plugin build",
 		"validate": "emdash-plugin validate",
 		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
 		"prepare": "npm run build"
+	},
+	"dependencies": {
+		"@gmsas95/emdash-commerce-contracts": "^0.1.2"
 	},
 	"peerDependencies": {
 		"emdash": ">=0.15.0"
@@ -45,7 +39,8 @@
 	"devDependencies": {
 		"@emdash-cms/plugin-cli": "^0.8.0",
 		"emdash": "^0.33.0",
-		"typescript": "^5.9.0"
+		"typescript": "^5.9.0",
+		"vitest": "^3.2.4"
 	},
 	"repository": {
 		"type": "git",
