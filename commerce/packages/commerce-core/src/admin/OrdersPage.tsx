@@ -131,7 +131,7 @@ export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
               <button ref={closeButtonRef} type="button" className="commerce-drawer-close" aria-label="Close" onClick={() => setSelectedOrderId(undefined)}>✕</button>
             </header>
             <div className="commerce-drawer-body">
-              <OrderDetail orderId={selectedOrderId} apiBasePath={apiBasePath} />
+              <OrderDetail orderId={selectedOrderId} apiBasePath={apiBasePath} onChanged={result.reload} />
             </div>
           </aside>
         </div>

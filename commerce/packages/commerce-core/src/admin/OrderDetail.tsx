@@ -113,7 +113,7 @@ function formatDate(value?: string): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
-export function OrderDetail({ orderId, apiBasePath }: AdminPageProps & { orderId: string }): AdminPageElement {
+export function OrderDetail({ orderId, apiBasePath, onChanged }: AdminPageProps & { orderId: string; onChanged?: () => void }): AdminPageElement {
   const encodedOrderId = encodeURIComponent(orderId);
   const orderResult = useCommerceData<OrderView>(`/orders?orderId=${encodedOrderId}`, apiBasePath);
   const notesResult = useCommerceData<{ items: NoteView[] }>(`/orders/notes?orderId=${encodedOrderId}`, apiBasePath);
@@ -128,6 +128,7 @@ export function OrderDetail({ orderId, apiBasePath }: AdminPageProps & { orderId
   function afterMutation(): void {
     orderResult.reload();
     notesResult.reload();
+    onChanged?.();
   }
 
   async function applyStatus(command: string): Promise<void> {
@@ -164,7 +165,6 @@ export function OrderDetail({ orderId, apiBasePath }: AdminPageProps & { orderId
     }
   }
 
-  const mutationError = statusMutation.error ?? refundMutation.error ?? noteMutation.error;
 
   return (
     <article aria-label={`Order ${orderId}`}>
@@ -184,7 +184,7 @@ export function OrderDetail({ orderId, apiBasePath }: AdminPageProps & { orderId
             </p>
             <section aria-labelledby="commerce-order-actions">
               <h2 id="commerce-order-actions">Actions</h2>
-              <div className="commerce-admin-toolbar">
+              <div className="commerce-admin-toolbar" style={{ justifyContent: "flex-start", alignItems: "center" }}>
                 <select
                   aria-label="Change order status"
                   value=""
@@ -194,13 +194,16 @@ export function OrderDetail({ orderId, apiBasePath }: AdminPageProps & { orderId
                     if (command !== "") void applyStatus(command);
                   }}
                 >
-                  <option value="">{transitions.length === 0 ? "No actions available" : "Choose action…"}</option>
+                  <option value="">{busy ? "Applying…" : transitions.length === 0 ? "No actions available" : "Choose action…"}</option>
                   {transitions.map(({ command, label }) => <option key={command} value={command}>{label}</option>)}
                 </select>
                 {order.status === "paid" || order.status === "processing" ? (
-                  <button type="button" onClick={() => void refund()} disabled={busy}>Refund…</button>
+                  <button type="button" onClick={() => void refund()} disabled={busy}>{busy ? "Working…" : "Refund…"}</button>
                 ) : null}
               </div>
+              {(statusMutation.error ?? refundMutation.error) ? (
+                <p role="alert">{statusMutation.error ?? refundMutation.error}</p>
+              ) : null}
             </section>
             <section aria-labelledby="commerce-order-items">
               <h2 id="commerce-order-items">Items</h2>
@@ -251,7 +254,7 @@ export function OrderDetail({ orderId, apiBasePath }: AdminPageProps & { orderId
           </label>
           <button type="submit" disabled={noteMutation.loading}>{noteMutation.loading ? "Adding…" : "Add note"}</button>
         </form>
-        {mutationError ? <p role="alert">{mutationError}</p> : null}
+        {noteMutation.error ? <p role="alert">{noteMutation.error}</p> : null}
         {notesResult.data?.items.length ? (
           notesResult.data.items.map((note) => (
             <p key={note.id}>
