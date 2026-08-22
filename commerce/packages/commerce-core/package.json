@@ -37,9 +37,12 @@
       "import": "./dist/domain/*.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "dependencies": {
-    "@gmsas95/emdash-commerce-contracts": "workspace:*"
+    "@gmsas95/emdash-commerce-contracts": "workspace:*",
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "emdash": ">=0.33.0",

@@ -27,7 +27,7 @@
 
 import { createCommerceBridgeRoutes, emitCommerceEvent } from "./commerce-bridge.js";
 import { signBridgePayload } from "./bridge/signature.js";
-import { z } from "zod";
+import type { ZodType } from "zod";
 import type { PluginContext, RouteHandler, SandboxedPlugin, SandboxedRouteContext } from "emdash/plugin";
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -92,16 +92,25 @@ interface ChipResult {
 	data: unknown;
 }
 
-const chipMcpSearchInput = z.object({
-	query: z.string().max(200).default(""),
-	status: z.enum(["created", "paid", "failed", "cancelled", "hold", "refunded"]).optional(),
-	limit: z.number().int().min(1).max(50).default(20),
-});
+const chipMcpSearchInput = {
+	type: "object",
+	properties: {
+		query: { type: "string", maxLength: 200 },
+		status: { type: "string", enum: ["created", "paid", "failed", "cancelled", "hold", "refunded"] },
+		limit: { type: "integer", minimum: 1, maximum: 50 },
+	},
+	additionalProperties: false,
+} as unknown as ZodType;
 
-const chipMcpExecuteInput = z.object({
-	operation: z.enum(["payment.list", "payment.get", "payment.create", "settings.status", "credentials.test"]),
-	arguments: z.record(z.string(), z.unknown()).default({}),
-});
+const chipMcpExecuteInput = {
+	type: "object",
+	properties: {
+		operation: { type: "string", enum: ["payment.list", "payment.get", "payment.create", "settings.status", "credentials.test"] },
+		arguments: { type: "object", additionalProperties: true },
+	},
+	required: ["operation"],
+	additionalProperties: false,
+} as unknown as ZodType;
 
 // ── Narrowing helpers ────────────────────────────────────────────────────
 
@@ -130,6 +139,26 @@ function getRecord(value: unknown, key: string): Record<string, unknown> | undef
 	if (!isRecord(value)) return undefined;
 	const v = value[key];
 	return isRecord(v) ? v : undefined;
+}
+
+function parseChipMcpSearchInput(value: unknown): { query: string; status?: string; limit: number } {
+	const input = isRecord(value) ? value : {};
+	const rawLimit = getNumber(input, "limit");
+	const status = getString(input, "status");
+	const allowed = ["created", "paid", "failed", "cancelled", "hold", "refunded"];
+	return {
+		query: (getString(input, "query") ?? "").slice(0, 200),
+		...(status && allowed.includes(status) ? { status } : {}),
+		limit: rawLimit && Number.isSafeInteger(rawLimit) ? Math.max(1, Math.min(50, rawLimit)) : 20,
+	};
+}
+
+function parseChipMcpExecuteInput(value: unknown): { operation: string; arguments: Record<string, unknown> } {
+	const input = isRecord(value) ? value : {};
+	const operation = getString(input, "operation");
+	const allowed = ["payment.list", "payment.get", "payment.create", "settings.status", "credentials.test"];
+	if (!operation || !allowed.includes(operation)) throw new Error("Unsupported CHIP MCP operation");
+	return { operation, arguments: getRecord(input, "arguments") ?? {} };
 }
 
 /** Validate the optional `products` passthrough. Returns undefined when absent. */
@@ -774,7 +803,7 @@ const paymentDetailHandler: RouteHandler = async (routeCtx, ctx) => {
 };
 
 const mcpSearchHandler: RouteHandler = async (routeCtx, ctx) => {
-	const input = chipMcpSearchInput.parse(isRecord(routeCtx.input) ? routeCtx.input : {});
+	const input = parseChipMcpSearchInput(routeCtx.input);
 	const query = input.query.trim().toLowerCase();
 	const result = await ctx.storage.payments!.query({
 		...(input.status ? { where: { status: input.status } } : {}),
@@ -801,7 +830,7 @@ const mcpSearchHandler: RouteHandler = async (routeCtx, ctx) => {
 };
 
 const mcpExecuteHandler: RouteHandler = async (routeCtx, ctx) => {
-	const input = chipMcpExecuteInput.parse(isRecord(routeCtx.input) ? routeCtx.input : {});
+	const input = parseChipMcpExecuteInput(routeCtx.input);
 	const args = input.arguments;
 	switch (input.operation) {
 		case "payment.list":
@@ -944,8 +973,8 @@ export default {
 		callback: { public: true, handler: callbackHandler },
 		payments: { handler: paymentsHandler },
 		"payments/detail": { handler: paymentDetailHandler },
-		"mcp/search": { permission: "plugins:manage", input: chipMcpSearchInput, handler: mcpSearchHandler },
-		"mcp/execute": { permission: "plugins:manage", input: chipMcpExecuteInput, handler: mcpExecuteHandler },
+		"mcp/search": { permission: "plugins:manage", handler: mcpSearchHandler },
+		"mcp/execute": { permission: "plugins:manage", handler: mcpExecuteHandler },
 		settings: { handler: settingsHandler },
 		"settings/save": { handler: settingsSaveHandler },
 		...commerceBridgeRoutes,

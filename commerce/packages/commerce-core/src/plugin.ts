@@ -2,6 +2,7 @@ import { definePlugin, PluginRouteError } from "emdash";
 import type { PluginContext, PluginDescriptor, ResolvedPlugin, RouteContext } from "emdash";
 import { getCommerceEventSigningData, parseAddressSnapshot } from "@gmsas95/emdash-commerce-contracts";
 import type { CommerceEvent, CustomerSnapshot } from "@gmsas95/emdash-commerce-contracts";
+import { z } from "zod";
 import { addCartLine } from "./domain/cart.js";
 import type { Cart } from "./domain/cart.js";
 import { createOrderSnapshot } from "./domain/orders.js";
@@ -13,6 +14,7 @@ import {
   productSaveRoute,
   productsRoute,
 } from "./admin/products-api.js";
+import { commerceMcpExecuteInput, commerceMcpExecuteRoute, commerceMcpSearchInput, commerceMcpSearchRoute } from "./mcp.js";
 import { createMemoryReplayStore, verifyBridgeSignature } from "./bridge/signature.js";
 import type { BridgeReplayStore } from "./bridge/signature.js";
 import { sendBridgeCommand } from "./bridge/client.js";
@@ -480,7 +482,24 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       checkout: { public: true, handler: (context) => checkoutRoute(options, context) },
       order: { public: true, handler: publicOrderRoute },
       orders: { public: false, handler: ordersRoute },
+      "mcp/search": { public: false, permission: "plugins:manage", handler: commerceMcpSearchRoute },
+      "mcp/execute": { public: false, permission: "plugins:manage", handler: commerceMcpExecuteRoute },
       "bridge/events": { public: true, handler: (context) => bridgeEventsRoute(options, replayStore, context) },
+    },
+    mcp: {
+      tools: {
+        search: {
+          description: "Search Commerce products, inventory, orders, and customers using one scoped query.",
+          route: "mcp/search",
+          input: commerceMcpSearchInput,
+        },
+        execute: {
+          description: "Execute an allowlisted Commerce operation such as product.list, product.get, product.save, product.archive, inventory.list, order.list, or customer.list.",
+          route: "mcp/execute",
+          input: commerceMcpExecuteInput,
+          destructive: true,
+        },
+      },
     },
     hooks: {
       "plugin:install": async (_event, context) => {

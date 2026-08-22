@@ -27,7 +27,7 @@ importers:
         specifier: ^6.0.4
         version: 6.0.4(@types/node@26.2.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(yaml@2.9.0)
       '@chip-in-asia/plugin-chip-for-emdash':
-        specifier: github:gmsas95/chip-for-emdash#8c28b67
+        specifier: github:gmsas95/chip-for-emdash#8c28b67d104c7e0d8e0bf026fca6d2ab2a252647
         version: https://codeload.github.com/gmsas95/chip-for-emdash/tar.gz/8c28b67d104c7e0d8e0bf026fca6d2ab2a252647(emdash@0.34.0(@astrojs/react@6.0.4(@types/node@26.2.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(yaml@2.9.0))(@atcute/identity@2.0.2(@atcute/lexicons@2.1.0)(typescript@5.9.3))(@date-fns/tz@1.5.0)(@floating-ui/dom@1.8.0)(@tiptap/extensions@3.30.2(@tiptap/core@3.30.2(@tiptap/pm@3.30.2))(@tiptap/pm@3.30.2))(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(astro@7.2.4(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)(@types/node@26.2.0)(yaml@2.9.0))(date-fns@4.4.0)(echarts@6.1.0)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))
       '@emdash-cms/cloudflare':
         specifier: ^0.34.0
@@ -80,6 +80,9 @@ importers:
       react:
         specifier: '>=18'
         version: 19.2.8
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/commerce-test-fixtures: {}
 
@@ -410,7 +413,7 @@ packages:
     engines: {node: '>=18'}
 
   '@chip-in-asia/plugin-chip-for-emdash@https://codeload.github.com/gmsas95/chip-for-emdash/tar.gz/8c28b67d104c7e0d8e0bf026fca6d2ab2a252647':
-    resolution: {gitHosted: true, integrity: sha512-KWIMRmTDfLmqIjL9hoYG85+xj+mc0sQ14Y15dmd0HuvSCSZAvYqFDMftT9l6AvdZwKXg/+0YEIvmRQADNVMZtg==, tarball: https://codeload.github.com/gmsas95/chip-for-emdash/tar.gz/8c28b67d104c7e0d8e0bf026fca6d2ab2a252647}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/gmsas95/chip-for-emdash/tar.gz/8c28b67d104c7e0d8e0bf026fca6d2ab2a252647}
     version: 0.1.1
     peerDependencies:
       emdash: '>=0.15.0'
