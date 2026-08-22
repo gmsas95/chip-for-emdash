@@ -108,12 +108,15 @@ export function formatMinorAmount(amountMinor: number, currency: string): string
 
 const COMMERCE_ADMIN_CSS = `
 .commerce-admin {
-  --commerce-ink: #20221f;
-  --commerce-muted: #6f746d;
-  --commerce-surface: #ffffff;
-  --commerce-surface-soft: #f4f6f2;
-  --commerce-line: #dfe5de;
-  --commerce-accent: #e75b3e;
+  --commerce-ink: var(--text-color-kumo-default);
+  --commerce-muted: var(--text-color-kumo-subtle);
+  --commerce-surface: var(--color-kumo-base);
+  --commerce-surface-soft: var(--color-kumo-canvas);
+  --commerce-line: var(--color-kumo-line);
+  --commerce-accent: var(--color-kumo-brand);
+  --commerce-accent-hover: var(--color-kumo-brand-hover);
+  --commerce-focus: var(--color-kumo-focus);
+  --commerce-danger: var(--color-kumo-danger);
   max-width: 1180px;
   margin: 0 auto;
   padding: 32px clamp(20px, 4vw, 56px) 64px;
@@ -194,26 +197,21 @@ const COMMERCE_ADMIN_CSS = `
   outline: 3px solid color-mix(in srgb, var(--commerce-accent) 22%, transparent);
 }
 .commerce-admin button {
-  min-height: 40px;
-  border: 1px solid var(--commerce-ink);
-  border-radius: 9px;
-  padding: 9px 14px;
-  background: var(--commerce-ink);
-  color: #fff;
+  color: var(--text-color-kumo-inverse);
   cursor: pointer;
   font: inherit;
   font-weight: 700;
 }
-.commerce-admin button:hover { background: var(--commerce-accent); border-color: var(--commerce-accent); }
+.commerce-admin button:hover { background: var(--commerce-accent-hover); border-color: var(--commerce-accent-hover); }
 .commerce-admin button:disabled { cursor: wait; opacity: .55; }
 .commerce-admin button + button { margin-left: 8px; }
-.commerce-admin a { color: var(--commerce-accent); font-weight: 700; }
+.commerce-admin a { color: var(--text-color-kumo-link, var(--commerce-accent)); font-weight: 700; }
 .commerce-admin fieldset { display: grid; gap: 12px; margin: 14px 0; border: 1px solid var(--commerce-line); border-radius: 10px; padding: 16px; }
 .commerce-admin legend { padding: 0 6px; font-weight: 750; }
 .commerce-admin .commerce-admin-toolbar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 14px; }
-.commerce-admin [role="alert"] { border: 1px solid #e3a092; border-radius: 10px; padding: 12px 14px; background: #fff3ef; color: #8a2e20; }
+.commerce-admin [role="alert"] { border: 1px solid var(--commerce-danger); border-radius: 10px; padding: 12px 14px; background: var(--color-kumo-danger-tint, var(--commerce-surface-soft)); color: var(--text-color-kumo-danger, var(--commerce-danger)); }
 .commerce-admin [role="status"] { color: var(--commerce-muted); }
-.commerce-admin .commerce-skeleton { height: 72px; border-radius: 12px; background: linear-gradient(90deg, var(--commerce-surface-soft), #fff, var(--commerce-surface-soft)); background-size: 200% 100%; animation: commerce-skeleton 1.2s ease-in-out infinite; }
+.commerce-admin .commerce-skeleton { height: 72px; border-radius: 12px; background: linear-gradient(90deg, var(--commerce-surface-soft), var(--commerce-surface), var(--commerce-surface-soft)); background-size: 200% 100%; animation: commerce-skeleton 1.2s ease-in-out infinite; }
 @keyframes commerce-skeleton { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (max-width: 720px) {
   .commerce-admin { padding: 22px 16px 48px; }
