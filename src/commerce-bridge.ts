@@ -98,6 +98,10 @@ function providerErrorRetryable(error: unknown): boolean {
 	const message = error instanceof Error ? error.message : "";
 	return !/secret key|network:request|not configured/i.test(message);
 }
+function providerErrorMessage(error: unknown): string {
+	const message = error instanceof Error ? error.message : "";
+	return message === "CHIP secret key is not configured" ? message : "Payment provider unavailable";
+}
 interface CommerceEventDeliveryRecord {
 	id: string;
 	deliveryId: string;
@@ -266,21 +270,21 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 				return failure(auth.request.requestId, "PAYMENT_CREATION_IN_PROGRESS", "Payment creation is already in progress", true);
 			}
 			let created: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
-		try {
-			created = await deps.createChipPurchase(ctx, {
-				client: {},
-				purchase: { currency, products: [{ name, price: amount, quantity: "1" }] },
-				brand_id: auth.settings.brandId,
-				reference: orderId,
-				success_redirect: returnUrl,
-				failure_redirect: returnUrl,
-				cancel_redirect: returnUrl,
-				...(callbackAllowed ? { success_callback: returnUrl } : {}),
-				metadata: { commerceOrderId: orderId, commercePaymentId: auth.request.requestId, idempotencyKey: auth.request.idempotencyKey },
-			});
-		} catch (error) {
-			return failure(auth.request.requestId, "PROVIDER_ERROR", "Payment provider unavailable", providerErrorRetryable(error));
-		}
+			try {
+				created = await deps.createChipPurchase(ctx, {
+					client: {},
+					purchase: { currency, products: [{ name, price: amount, quantity: "1" }] },
+					brand_id: auth.settings.brandId,
+					reference: orderId,
+					success_redirect: returnUrl,
+					failure_redirect: returnUrl,
+					cancel_redirect: returnUrl,
+					...(callbackAllowed ? { success_callback: returnUrl } : {}),
+					metadata: { commerceOrderId: orderId, commercePaymentId: auth.request.requestId, idempotencyKey: auth.request.idempotencyKey },
+				});
+			} catch (error) {
+				return failure(auth.request.requestId, "PROVIDER_ERROR", providerErrorMessage(error), providerErrorRetryable(error));
+			}
 		const purchaseId = created.purchase && typeof created.purchase.id === "string" ? created.purchase.id : undefined;
 		const checkoutUrl = created.purchase && typeof created.purchase.checkout_url === "string" ? created.purchase.checkout_url : undefined;
 		if (!purchaseId || !checkoutUrl) return failure(auth.request.requestId, "PROVIDER_ERROR", created.error ?? "Payment provider failed", created.retryable === true);

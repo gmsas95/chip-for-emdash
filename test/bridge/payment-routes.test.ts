@@ -70,6 +70,16 @@ describe("CHIP Commerce payment routes", () => {
     expect(first).toMatchObject({ ok: true, data: { checkoutUrl: "https://payments.example.test/checkout/1", status: "created" } });
     expect(second).toEqual(first);
   });
+  it("reports missing CHIP credentials without hiding the provider reason", async () => {
+    const route = chipPlugin.routes["commerce/payment/create"];
+    const ctx = baseContext();
+    ctx.kv.get = async (key: string) => key === "settings:commerceBridgeSecret" ? "shared-secret" : key === "settings:brandId" ? "brand-1" : undefined;
+    const request = await signedCreate();
+
+    const result = await route.handler(context(request, ctx), ctx as never);
+
+    expect(result).toMatchObject({ ok: false, error: { code: "PROVIDER_ERROR", message: "CHIP secret key is not configured" } });
+  });
 });
 
 describe("CHIP Block Kit admin pages", () => {
