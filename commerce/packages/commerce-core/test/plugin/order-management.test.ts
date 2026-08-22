@@ -187,3 +187,16 @@ describe("Commerce legacy order backfill", () => {
     expect(await repositories.orders.get("legacy-1")).toMatchObject({ status: "pending_payment", paymentStatus: "pending" });
   });
 });
+
+describe("Commerce lazy backfill on admin list", () => {
+  it("heals legacy orders when the orders list is loaded", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.orders.put("legacy-2", { id: "legacy-2", orderId: "legacy-2", currency: "USD", lines: [], items: [] } as never);
+    const plugin = createPlugin();
+    const storage = storageFor(repositories);
+
+    await plugin.routes.orders.handler({ input: {}, request: new Request("https://commerce.test", { method: "GET" }), storage, requestMeta: {} } as never);
+
+    expect(await repositories.orders.get("legacy-2")).toMatchObject({ status: "pending_payment", paymentStatus: "pending" });
+  });
+});

@@ -433,6 +433,7 @@ async function ordersRoute(context: RouteContext): Promise<unknown> {
       }
       return order;
     }
+    await ensureLegacyOrderStatuses(context);
     return repositories.orders.query({ limit: 50 });
   }
   requireMethod(context, "POST");
@@ -661,6 +662,18 @@ async function backfillLegacyOrderStatuses(context: PluginContext): Promise<void
     }
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor !== undefined);
+}
+
+let legacyStatusBackfillDone = false;
+
+async function ensureLegacyOrderStatuses(context: RouteContext): Promise<void> {
+  if (legacyStatusBackfillDone) return;
+  legacyStatusBackfillDone = true;
+  try {
+    await backfillLegacyOrderStatuses(context as unknown as PluginContext);
+  } catch {
+    legacyStatusBackfillDone = false;
+  }
 }
 
 async function migrateOrderAccessTokens(ctx: PluginContext): Promise<void> {
