@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createMemoryRepositories, createPlugin, type CommerceRepositories } from "../../src/index.js";
 
 function storageFrom(repositories: CommerceRepositories): Record<string, unknown> {
@@ -22,6 +23,10 @@ describe("Commerce MCP tools", () => {
     expect(plugin.mcp?.tools.execute.destructive).toBe(true);
     expect(plugin.routes["mcp/search"]?.permission).toBe("plugins:manage");
     expect(plugin.routes["mcp/execute"]?.permission).toBe("plugins:manage");
+  });
+  it("provides native Zod schemas for EmDash consent serialization", () => {
+    const plugin = createPlugin({});
+    expect(() => z.toJSONSchema(plugin.mcp!.tools.search.input)).not.toThrow();
   });
 
   it("searches persisted product records without exposing secrets", async () => {

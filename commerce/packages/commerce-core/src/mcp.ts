@@ -1,4 +1,4 @@
-import type { ZodType } from "zod";
+import { z } from "zod";
 import { PluginRouteError } from "emdash";
 import type { RouteContext } from "emdash";
 import { isRecord } from "./domain/guards.js";
@@ -6,28 +6,18 @@ import { createEmDashRepositories } from "./storage/repositories.js";
 import type { CommerceRepositories, EmDashCommerceStorage } from "./storage/repositories.js";
 import { productArchiveRoute, productDetailRoute, productSaveRoute } from "./admin/products-api.js";
 
-const commerceMcpSearchJsonSchema = {
-  type: "object",
-  properties: {
-    query: { type: "string", maxLength: 200 },
-    scope: { type: "string", enum: ["all", "products", "inventory", "orders", "customers"] },
-    limit: { type: "integer", minimum: 1, maximum: 50 },
-  },
-  additionalProperties: false,
-} as const;
+const commerceMcpSearchInput = z.object({
+  query: z.string().max(200).optional(),
+  scope: z.enum(["all", "products", "inventory", "orders", "customers"]).optional(),
+  limit: z.number().int().min(1).max(50).optional(),
+});
 
-const commerceMcpExecuteJsonSchema = {
-  type: "object",
-  properties: {
-    operation: { type: "string", enum: ["product.list", "product.get", "product.save", "product.archive", "inventory.list", "order.list", "customer.list"] },
-    arguments: { type: "object", additionalProperties: true },
-  },
-  required: ["operation"],
-  additionalProperties: false,
-} as const;
+const commerceMcpExecuteInput = z.object({
+  operation: z.enum(["product.list", "product.get", "product.save", "product.archive", "inventory.list", "order.list", "customer.list"]),
+  arguments: z.record(z.string(), z.unknown()).optional(),
+});
 
-export const commerceMcpSearchInput = commerceMcpSearchJsonSchema as unknown as ZodType;
-export const commerceMcpExecuteInput = commerceMcpExecuteJsonSchema as unknown as ZodType;
+export { commerceMcpSearchInput, commerceMcpExecuteInput };
 
 type SearchInput = { query: string; scope: "all" | "products" | "inventory" | "orders" | "customers"; limit: number };
 type ExecuteInput = { operation: "product.list" | "product.get" | "product.save" | "product.archive" | "inventory.list" | "order.list" | "customer.list"; arguments: Record<string, unknown> };
