@@ -2,40 +2,24 @@
 import { getSiteSettings } from "emdash";
 import Base from "../layouts/Base.astro";
 import ClientCatalog from "../components/ClientCatalog.astro";
+import CmsPageContent from "../components/CmsPageContent.astro";
+import { loadCmsPage } from "../lib/cms";
 import { resolveStarterSiteIdentity } from "../utils/site-identity";
 
+const { page: homePage, cacheHint } = await loadCmsPage("home");
+Astro.cache.set(cacheHint);
 const { siteTitle, siteTagline } = resolveStarterSiteIdentity(await getSiteSettings());
+const title = homePage?.data.title ?? siteTitle;
 ---
-
-<Base title={siteTitle} description={siteTagline}>
-  <section class="hero">
-    <div>
-      <p class="eyebrow">A considered collection</p>
-      <h1>Good things, chosen well.</h1>
-      <p class="lede">A calm, confident storefront for products people keep, use, and come back to.</p>
-      <p><a class="button" href="/shop">Explore the collection</a></p>
-    </div>
-    <div class="hero-art" aria-label="Featured collection artwork"></div>
+<Base title={title} description={siteTagline} content={homePage ? { collection: "pages", id: homePage.data.id ?? homePage.id, slug: homePage.id } : undefined}>
+  <section class="cms-hero">
+    {homePage ? <CmsPageContent page={homePage} /> : <div class="page-wrap section"><h1>Homepage content is not published.</h1><p>Publish the <code>home</code> page from EmDash Admin to control this storefront.</p><a class="button" href="/_emdash/admin/content/pages/new">Create homepage content</a></div>}
   </section>
   <section class="section" aria-labelledby="featured-heading">
     <div class="section-heading">
-      <div><p class="eyebrow">The collection</p><h2 id="featured-heading">Made for the everyday.</h2></div>
+      <div><h2 id="featured-heading">Published products</h2><p>Live from Commerce Core.</p></div>
       <a class="button secondary" href="/shop">View all</a>
     </div>
     <ClientCatalog id="featured-products" limit={4} />
-  </section>
-  <section class="split-section">
-    <p class="eyebrow">The standard</p>
-    <h2>Thoughtful materials. Clear choices. No noise.</h2>
-    <p class="lede">Every order is calculated server-side, paid through a secure hosted checkout, and tracked from purchase to delivery.</p>
-  </section>
-  <section class="section" id="faq">
-    <p class="eyebrow">Questions</p>
-    <h2>Simple from first click to doorstep.</h2>
-    <div class="form-stack">
-      <details><summary>How does checkout work?</summary><p>You review your cart, enter delivery details, and continue to CHIP's hosted payment page.</p></details>
-      <details><summary>How do returns work?</summary><p>See our <a href="/shipping-returns">shipping and returns policy</a> for the current process.</p></details>
-      <details><summary>Can I contact someone?</summary><p>Yes. Reach us through the <a href="/contact">contact page</a>.</p></details>
-    </div>
   </section>
 </Base>

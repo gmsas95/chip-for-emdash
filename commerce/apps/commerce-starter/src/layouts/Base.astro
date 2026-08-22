@@ -25,6 +25,7 @@ const { siteTitle, siteTagline, siteLogo } = resolveStarterSiteIdentity(await ge
 const fullTitle = title.includes(siteTitle) ? title : `${title} — ${siteTitle}`;
 const pageDescription = description ?? siteTagline;
 const menu = await getMenu("primary");
+const footerMenu = await getMenu("footer");
 const pageCtx = createPublicPageContext({
   Astro,
   kind: content ? "content" : "custom",
@@ -59,9 +60,7 @@ const pageCtx = createPublicPageContext({
             : <span>{siteTitle}</span>}
         </a>
         <div class="nav-links">
-          <a href="/shop">Shop</a>
           {menu?.items.map((item) => <a href={item.url} target={item.target}>{item.label}</a>)}
-          <a href="/about">About</a>
           <a class="cart-link" href="/cart">Cart <span data-cart-count>0</span></a>
         </div>
         <LiveSearch placeholder="Search..." collections={["posts", "pages"]} />
@@ -73,13 +72,10 @@ const pageCtx = createPublicPageContext({
     <footer class="site-footer">
       <div>
         <p class="eyebrow">{siteTitle}</p>
-        <p>{siteTagline || "Thoughtful goods, shipped with care."}</p>
+        <p>{siteTagline}</p>
       </div>
       <nav aria-label="Footer navigation">
-        <a href="/shipping-returns">Shipping & returns</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/terms">Terms</a>
-        <a href="/contact">Contact</a>
+        {footerMenu?.items.map((item) => <a href={item.url} target={item.target}>{item.label}</a>)}
       </nav>
       <WidgetArea name="sidebar" />
     </footer>

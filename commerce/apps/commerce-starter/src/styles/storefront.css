@@ -83,3 +83,10 @@ textarea { min-height: 8rem; resize: vertical; }
 details { padding: 1rem 0; border-bottom: 1px solid var(--line); }
 summary { cursor: pointer; font-weight: 700; }
 @media (max-width: 800px) { .product-detail-grid { grid-template-columns: 1fr; } .cart-row { grid-template-columns: 1fr auto; } }
+.cms-hero { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: clamp(3rem, 8vw, 7rem) 0 2rem; }
+.cms-page { max-width: 72ch; }
+.cms-page h1 { max-width: 12ch; margin: 0 0 1.25rem; }
+.cms-page-content { color: var(--muted); font-size: 1.08rem; line-height: 1.7; }
+.cms-page-content h2, .cms-page-content h3 { color: var(--ink); margin-top: 2.5rem; }
+.cms-page-content a { color: var(--accent-dark); }
+.cms-page-content blockquote { margin: 2rem 0; padding: 1rem 1.5rem; border-left: 3px solid var(--accent); background: var(--surface); }

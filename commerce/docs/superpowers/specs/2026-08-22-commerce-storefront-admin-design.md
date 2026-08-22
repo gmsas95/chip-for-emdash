@@ -136,3 +136,27 @@ The visual system uses warm white/ink surfaces with one orange accent, CSS custo
 - Admin component tests cover create/edit/archive and visible CHIP configuration linking.
 - Starter tests cover every required route's rendering contract and the checkout redirect/result transitions.
 - Run Commerce tests, starter typecheck/build, and browser-drive the deployed storefront/admin routes. A real CHIP hosted checkout remains dependent on the supplied merchant account being configured and a published product existing in D1.
+
+## CMS-backed storefront content
+
+Marketing and trust content MUST be editable through EmDash's existing
+published `pages` collection rather than hardcoded in Astro templates. The
+frontend loads page entries with `getEmDashEntry` through a shared loader,
+calls `Astro.cache.set(cacheHint)`, renders `PortableText`, and spreads
+`entry.edit` attributes for logged-in visual editing.
+
+Required seeded page slugs:
+
+- `home`
+- `about`
+- `shipping-returns`
+- `privacy`
+- `terms`
+- `contact`
+
+The home page keeps Commerce product data live through the public catalog API,
+but its hero and editorial content come from the published `home` page. Primary
+and footer navigation come from EmDash menus. Embedded page images use EmDash
+media objects and therefore persist through the configured R2 media adapter.
+Missing pages show an explicit admin-create state rather than silently falling
+back to hardcoded marketing copy.

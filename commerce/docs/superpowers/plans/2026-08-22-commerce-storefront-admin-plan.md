@@ -211,3 +211,32 @@
 - [ ] Run Commerce tests, starter tests, Astro typecheck, production build, and the deployed route smoke checks.
 - [ ] Create one test product through the authenticated admin flow, verify it appears in D1 and public catalog after publication, upload one image and verify it appears in R2/media API, then exercise checkout until the CHIP hosted URL is returned using the configured test credentials.
 - [ ] Commit the implementation in focused commits and update PR #3 with the new commit range and verification output.
+
+### Task 9: Connect storefront content to EmDash CMS
+
+**Files:**
+- Create: `apps/commerce-starter/PRODUCT.md`
+- Create: `apps/commerce-starter/src/lib/cms.ts`
+- Create: `apps/commerce-starter/src/components/CmsPageContent.astro`
+- Create: `apps/commerce-starter/src/components/CmsPageRoute.astro`
+- Modify: `apps/commerce-starter/src/pages/index.astro`
+- Modify: `apps/commerce-starter/src/pages/about.astro`
+- Modify: `apps/commerce-starter/src/pages/shipping-returns.astro`
+- Modify: `apps/commerce-starter/src/pages/privacy.astro`
+- Modify: `apps/commerce-starter/src/pages/terms.astro`
+- Modify: `apps/commerce-starter/src/pages/contact.astro`
+- Modify: `apps/commerce-starter/src/layouts/Base.astro`
+- Modify: `apps/commerce-starter/seed/seed.json`
+- Modify: `apps/commerce-starter/test/smoke.test.ts`
+
+**Interfaces:**
+- `loadCmsPage(slug)` returns an EmDash page entry and its `cacheHint`.
+- `CmsPageContent` renders `PortableText` and forwards `entry.edit` attributes.
+- Homepage and trust/legal routes use published EmDash page entries.
+- Primary and footer navigation use EmDash menus.
+
+- [ ] Add seeded `home`, `shipping-returns`, `privacy`, `terms`, and `contact` pages plus a footer menu; preserve the existing `about` page.
+- [ ] Replace hardcoded marketing/legal page copy with the CMS page loader, Portable Text, cache invalidation, and admin-create empty states.
+- [ ] Remove static Shop/About/footer navigation assumptions and render configured EmDash menus.
+- [ ] Add smoke assertions proving CMS loaders, cache hints, seeded page slugs, and menu-backed navigation are present.
+- [ ] Run seed validation, starter typecheck/tests, and deployed admin-to-frontend edit verification on a clean client deployment.

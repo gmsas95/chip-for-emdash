@@ -1,0 +1,17 @@
+---
+import Base from "../layouts/Base.astro";
+import CmsPageContent from "./CmsPageContent.astro";
+import { loadCmsPage } from "../lib/cms";
+
+interface Props { slug: string; fallbackTitle: string; }
+const { slug, fallbackTitle } = Astro.props;
+const { page, cacheHint } = await loadCmsPage(slug);
+Astro.cache.set(cacheHint);
+const title = page?.data.title ?? fallbackTitle;
+const content = page ? { collection: "pages", id: page.data.id ?? page.id, slug: page.id } : undefined;
+---
+<Base title={title} content={content}>
+  <div class="page-wrap section">
+    {page ? <CmsPageContent page={page} /> : <div class="empty-state"><h1>{fallbackTitle} is not published.</h1><p>Create and publish the <code>{slug}</code> page in EmDash Admin to control this route.</p><a class="button" href={`/_emdash/admin/content/pages/new?slug=${slug}`}>Create page content</a></div>}
+  </div>
+</Base>

@@ -1,6 +1,4 @@
 ---
-import Base from "../layouts/Base.astro";
+import CmsPageRoute from "../components/CmsPageRoute.astro";
 ---
-<Base title="Shipping and returns" description="Shipping and returns information.">
-  <div class="page-wrap section"><p class="eyebrow">Shipping & returns</p><h1>Clear expectations.</h1><p class="lede">Available delivery options, rates, and estimated windows are shown at checkout for your address.</p><h2>Returns</h2><p>Contact the store before sending an item back. Include your order ID and the email used at checkout so support can confirm eligibility and provide next steps.</p><h2>Questions</h2><p>See the <a href="/contact">contact page</a> for support details.</p></div>
-</Base>
+<CmsPageRoute slug="shipping-returns" fallbackTitle="Shipping & returns" />

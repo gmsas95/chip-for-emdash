@@ -106,21 +106,21 @@
 			"name": "primary",
 			"label": "Primary Navigation",
 			"items": [
-				{
-					"type": "custom",
-					"label": "Home",
-					"url": "/"
-				},
-				{
-					"type": "custom",
-					"label": "Posts",
-					"url": "/posts"
-				},
-				{
-					"type": "custom",
-					"label": "About",
-					"url": "/about"
-				}
+				{ "type": "custom", "label": "Home", "url": "/" },
+				{ "type": "custom", "label": "Shop", "url": "/shop" },
+				{ "type": "custom", "label": "About", "url": "/about" },
+				{ "type": "custom", "label": "Shipping & returns", "url": "/shipping-returns" },
+				{ "type": "custom", "label": "Contact", "url": "/contact" }
+			]
+		},
+		{
+			"name": "footer",
+			"label": "Footer Navigation",
+			"items": [
+				{ "type": "custom", "label": "Shipping & returns", "url": "/shipping-returns" },
+				{ "type": "custom", "label": "Privacy", "url": "/privacy" },
+				{ "type": "custom", "label": "Terms", "url": "/terms" },
+				{ "type": "custom", "label": "Contact", "url": "/contact" }
 			]
 		}
 	],
@@ -172,6 +172,70 @@
 							],
 							"_key": "k0"
 						}
+					]
+				}
+			},
+			{
+				"id": "home",
+				"slug": "home",
+				"status": "published",
+				"data": {
+					"title": "A considered collection",
+					"content": [
+						{ "_type": "block", "style": "h1", "children": [{ "_type": "span", "text": "Good things, chosen well.", "_key": "home-h1" }], "_key": "home-1" },
+						{ "_type": "block", "style": "normal", "children": [{ "_type": "span", "text": "Thoughtful goods for the everyday, with clear choices from first click to doorstep.", "_key": "home-p1" }], "_key": "home-2" },
+						{ "_type": "block", "style": "h2", "children": [{ "_type": "span", "text": "Made for the everyday.", "_key": "home-h2" }], "_key": "home-3" },
+						{ "_type": "block", "style": "normal", "children": [{ "_type": "span", "text": "Browse the collection, choose what belongs in your life, and check out securely through CHIP.", "_key": "home-p2" }], "_key": "home-4" }
+					]
+				}
+			},
+			{
+				"id": "shipping-returns",
+				"slug": "shipping-returns",
+				"status": "published",
+				"data": {
+					"title": "Shipping & returns",
+					"content": [
+						{ "_type": "block", "style": "h1", "children": [{ "_type": "span", "text": "Clear expectations.", "_key": "shipping-h1" }], "_key": "shipping-1" },
+						{ "_type": "block", "style": "normal", "children": [{ "_type": "span", "text": "Available delivery options, rates, and estimated windows are shown at checkout for your address.", "_key": "shipping-p1" }], "_key": "shipping-2" },
+						{ "_type": "block", "style": "h2", "children": [{ "_type": "span", "text": "Returns", "_key": "shipping-h2" }], "_key": "shipping-3" },
+						{ "_type": "block", "style": "normal", "children": [{ "_type": "span", "text": "Contact the store before sending an item back. Include your order ID and the email used at checkout so support can confirm eligibility and provide next steps.", "_key": "shipping-p2" }], "_key": "shipping-4" }
+					]
+				}
+			},
+			{
+				"id": "privacy",
+				"slug": "privacy",
+				"status": "published",
+				"data": {
+					"title": "Privacy",
+					"content": [
+						{ "_type": "block", "style": "h1", "children": [{ "_type": "span", "text": "Your information, handled carefully.", "_key": "privacy-h1" }], "_key": "privacy-1" },
+						{ "_type": "block", "style": "normal", "children": [{ "_type": "span", "text": "We use the information you provide to process orders, communicate about delivery, prevent fraud, and provide support. Payment details are entered on CHIP's hosted checkout and are not stored by this storefront.", "_key": "privacy-p1" }], "_key": "privacy-2" }
+					]
+				}
+			},
+			{
+				"id": "terms",
+				"slug": "terms",
+				"status": "published",
+				"data": {
+					"title": "Terms",
+					"content": [
+						{ "_type": "block", "style": "h1", "children": [{ "_type": "span", "text": "Terms of purchase.", "_key": "terms-h1" }], "_key": "terms-1" },
+						{ "_type": "block", "style": "normal", "children": [{ "_type": "span", "text": "By placing an order, you confirm that your delivery details are accurate and that you are authorized to use the selected payment method. Prices and availability are confirmed by Commerce at checkout.", "_key": "terms-p1" }], "_key": "terms-2" }
+					]
+				}
+			},
+			{
+				"id": "contact",
+				"slug": "contact",
+				"status": "published",
+				"data": {
+					"title": "Contact",
+					"content": [
+						{ "_type": "block", "style": "h1", "children": [{ "_type": "span", "text": "How can we help?", "_key": "contact-h1" }], "_key": "contact-1" },
+						{ "_type": "block", "style": "normal", "children": [{ "_type": "span", "text": "For order support, include your order ID and the email used at checkout. Use the support channel configured by this store.", "_key": "contact-p1" }], "_key": "contact-2" }
 					]
 				}
 			}

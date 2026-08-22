@@ -1,0 +1,19 @@
+---
+import { PortableText } from "emdash/ui";
+
+interface Props {
+  page: {
+    id: string;
+    data: { title?: string; content?: unknown[] };
+    edit?: { title?: Record<string, unknown>; content?: Record<string, unknown> };
+  };
+}
+
+const { page } = Astro.props;
+---
+<article class="cms-page" data-cms-collection="pages" data-cms-slug={page.id}>
+  <h1 {...(page.edit?.title ?? {})}>{page.data.title ?? page.id}</h1>
+  <div class="cms-page-content" {...(page.edit?.content ?? {})}>
+    {page.data.content ? <PortableText value={page.data.content as never} /> : <p>This page has no published content yet.</p>}
+  </div>
+</article>

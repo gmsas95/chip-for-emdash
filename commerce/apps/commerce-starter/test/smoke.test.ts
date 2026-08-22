@@ -58,4 +58,18 @@ describe("Commerce starter", () => {
     expect(source).toContain("\"pnpm --filter @emdash-commerce/core build && astro build\"");
     expect(source).toContain("\"deploy\": \"pnpm run build && wrangler deploy\"");
   });
+
+  it("renders marketing content from EmDash pages", async () => {
+    const [home, route, seed] = await Promise.all([
+      read("src/pages/index.astro"),
+      read("src/components/CmsPageRoute.astro"),
+      read("seed/seed.json"),
+    ]);
+    expect(home).toContain("loadCmsPage");
+    expect(home).toContain("CmsPageContent");
+    expect(route).toContain("loadCmsPage");
+    expect(route).toContain("Astro.cache.set");
+    expect(seed).toContain("\"home\"");
+    expect(seed).toContain("\"shipping-returns\"");
+  });
 });

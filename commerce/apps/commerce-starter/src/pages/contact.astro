@@ -1,6 +1,4 @@
 ---
-import Base from "../layouts/Base.astro";
+import CmsPageRoute from "../components/CmsPageRoute.astro";
 ---
-<Base title="Contact" description="Contact the store.">
-  <div class="page-wrap section"><p class="eyebrow">Contact</p><h1>How can we help?</h1><p class="lede">For order support, include your order ID and the email used at checkout.</p><div class="notice"><p>Use the support channel configured by this store. The order confirmation and site settings are the source of truth for the current contact address.</p></div></div>
-</Base>
+<CmsPageRoute slug="contact" fallbackTitle="Contact" />

@@ -1,6 +1,4 @@
 ---
-import Base from "../layouts/Base.astro";
+import CmsPageRoute from "../components/CmsPageRoute.astro";
 ---
-<Base title="About" description="Why this collection exists.">
-  <div class="page-wrap section"><p class="eyebrow">About</p><h1>Built around better choices.</h1><p class="lede">This storefront is designed for a focused collection of products, clear pricing, and a checkout experience that respects your time.</p></div>
-</Base>
+<CmsPageRoute slug="about" fallbackTitle="About" />
