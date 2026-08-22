@@ -27,6 +27,7 @@
 
 import { createCommerceBridgeRoutes, emitCommerceEvent } from "./commerce-bridge.js";
 import { signBridgePayload } from "./bridge/signature.js";
+import { z } from "zod";
 import type { PluginContext, RouteHandler, SandboxedPlugin, SandboxedRouteContext } from "emdash/plugin";
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -90,6 +91,17 @@ interface ChipResult {
 	/** Parsed JSON body (purchase object, error object, or PEM string). */
 	data: unknown;
 }
+
+const chipMcpSearchInput = z.object({
+	query: z.string().max(200).default(""),
+	status: z.enum(["created", "paid", "failed", "cancelled", "hold", "refunded"]).optional(),
+	limit: z.number().int().min(1).max(50).default(20),
+});
+
+const chipMcpExecuteInput = z.object({
+	operation: z.enum(["payment.list", "payment.get", "payment.create", "settings.status", "credentials.test"]),
+	arguments: z.record(z.string(), z.unknown()).default({}),
+});
 
 // ── Narrowing helpers ────────────────────────────────────────────────────
 
@@ -761,6 +773,54 @@ const paymentDetailHandler: RouteHandler = async (routeCtx, ctx) => {
 	return { ok: true, item: { ...record } };
 };
 
+const mcpSearchHandler: RouteHandler = async (routeCtx, ctx) => {
+	const input = chipMcpSearchInput.parse(isRecord(routeCtx.input) ? routeCtx.input : {});
+	const query = input.query.trim().toLowerCase();
+	const result = await ctx.storage.payments!.query({
+		...(input.status ? { where: { status: input.status } } : {}),
+		orderBy: { createdAt: "desc" },
+		limit: 100,
+	});
+	const items = result.items.flatMap(({ id, data }) => {
+		const record = asPaymentRecord(data);
+		if (!record) return [];
+		const matches = [record.reference, record.purchaseId, record.productName, record.clientEmail, record.status]
+			.some((value) => value?.toLowerCase().includes(query));
+		if (!matches) return [];
+		return [{
+			type: "payment",
+			id,
+			reference: record.reference,
+			status: record.status,
+			amount: record.amount,
+			currency: record.currency,
+			createdAt: record.createdAt,
+		}];
+	});
+	return { results: items.slice(0, input.limit) };
+};
+
+const mcpExecuteHandler: RouteHandler = async (routeCtx, ctx) => {
+	const input = chipMcpExecuteInput.parse(isRecord(routeCtx.input) ? routeCtx.input : {});
+	const args = input.arguments;
+	switch (input.operation) {
+		case "payment.list":
+			return paymentsHandler({ ...routeCtx, input: args }, ctx);
+		case "payment.get":
+			return paymentDetailHandler({ ...routeCtx, input: args }, ctx);
+		case "payment.create":
+			return createHandler({ ...routeCtx, input: args }, ctx);
+		case "settings.status":
+			return settingsHandler(routeCtx, ctx);
+		case "credentials.test": {
+			const settings = await loadSettings(ctx);
+			if (!settings.secretKey) return { ok: false, configured: false, error: "CHIP secret key is not configured" };
+			const result = await getChipPublicKey(ctx);
+			return { ok: result.ok, configured: true, ...(result.ok ? {} : { error: result.error ?? "CHIP credentials rejected" }) };
+		}
+	}
+};
+
 /** Private GET — current settings, with the secret key masked. */
 const settingsHandler: RouteHandler = async (_routeCtx, ctx) => {
 	const settings = await loadSettings(ctx);
@@ -884,10 +944,27 @@ export default {
 		callback: { public: true, handler: callbackHandler },
 		payments: { handler: paymentsHandler },
 		"payments/detail": { handler: paymentDetailHandler },
+		"mcp/search": { permission: "plugins:manage", input: chipMcpSearchInput, handler: mcpSearchHandler },
+		"mcp/execute": { permission: "plugins:manage", input: chipMcpExecuteInput, handler: mcpExecuteHandler },
 		settings: { handler: settingsHandler },
 		"settings/save": { handler: settingsSaveHandler },
 		...commerceBridgeRoutes,
 		admin: { handler: adminHandler },
+	},
+	mcp: {
+		tools: {
+			search: {
+				description: "Search CHIP payment records by reference, purchase, product, customer, or status.",
+				route: "mcp/search",
+				input: chipMcpSearchInput,
+			},
+			execute: {
+				description: "Execute an allowlisted CHIP operation: payment.list, payment.get, payment.create, settings.status, or credentials.test.",
+				route: "mcp/execute",
+				input: chipMcpExecuteInput,
+				destructive: true,
+			},
+		},
 	},
 } satisfies SandboxedPlugin;
 

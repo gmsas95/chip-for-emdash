@@ -112,3 +112,36 @@ describe("CHIP Block Kit admin pages", () => {
     expect(detail.blocks).toEqual(expect.arrayContaining([expect.objectContaining({ type: "fields" })]));
   });
 });
+
+describe("CHIP MCP tools", () => {
+  it("declares search and execute tools for the site MCP endpoint", () => {
+    const tools = chipPlugin.mcp?.tools ?? {};
+    expect(Object.keys(tools)).toEqual(["search", "execute"]);
+    expect(tools.execute.destructive).toBe(true);
+  });
+
+  it("searches payment records through the MCP route", async () => {
+    const ctx = baseContext();
+    await ctx.storage.payments.put("payment-1", {
+      id: "payment-1",
+      purchaseId: "purchase-1",
+      returnToken: "return-token",
+      reference: "order-1",
+      amount: 5000,
+      currency: "MYR",
+      status: "paid",
+      productName: "Tea",
+      createdAt: "2026-08-22T00:00:00.000Z",
+      updatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    const result = await chipPlugin.routes["mcp/search"].handler(context({ query: "tea", limit: 10 }, ctx), ctx as never) as { results: Array<Record<string, unknown>> };
+    expect(result.results).toEqual([expect.objectContaining({ type: "payment", id: "payment-1", reference: "order-1" })]);
+  });
+
+  it("executes safe credential status checks without returning the secret", async () => {
+    const ctx = baseContext();
+    const result = await chipPlugin.routes["mcp/execute"].handler(context({ operation: "settings.status", arguments: {} }, ctx), ctx as never) as { settings?: Record<string, unknown> };
+    expect(result.settings).toMatchObject({ secretKeySet: true, brandId: "brand-1" });
+    expect(JSON.stringify(result)).not.toContain("provider-secret");
+  });
+});
