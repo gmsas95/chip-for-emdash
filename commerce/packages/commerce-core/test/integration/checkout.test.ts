@@ -66,4 +66,64 @@ describe("Commerce checkout integration", () => {
     expect(result.checkoutUrl).toMatch(/^https:\/\/payments\.example\.test\/checkout\//);
     await expect(plugin.routes.orders.handler(context({ orderId: "missing" }, "POST"))).rejects.toThrow("Order not found");
   });
+  it("surfaces safe provider configuration details when payment creation fails", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 1000, currency: "USD" });
+    const storage = Object.fromEntries(Object.entries(repositories).map(([name, repository]) => [name, {
+      get: async (id: string) => (await repository.get(id)) ?? null,
+      put: (id: string, data: never) => repository.put(id, data),
+      delete: async (id: string) => { await repository.delete(id); return true; },
+      query: (options?: never) => repository.query(options),
+      count: (where?: never) => repository.count(where),
+    }]));
+    const plugin = createPlugin({
+      paymentProviders: {
+        "payment-provider": {
+          createPayment: async () => { throw new Error("BRIDGE_NOT_CONFIGURED: Commerce bridge is not configured"); },
+        },
+      },
+    });
+    const context = (input: unknown, method: string) => ({ input, request: new Request("https://commerce.test", { method }), storage, requestMeta: {} }) as never;
+    const cart = await plugin.routes.cart.handler(context({ line: { productId: "p-1", quantity: 1 } }, "POST")) as { id: string };
+
+    await expect(plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "payment-provider" }, "POST"))).rejects.toThrow(
+      "Payment provider failed: BRIDGE_NOT_CONFIGURED: Commerce bridge is not configured",
+    );
+  });
+  it("surfaces bridge response errors from the configured payment provider", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 1000, currency: "USD" });
+    const storage = Object.fromEntries(Object.entries(repositories).map(([name, repository]) => [name, {
+      get: async (id: string) => (await repository.get(id)) ?? null,
+      put: (id: string, data: never) => repository.put(id, data),
+      delete: async (id: string) => { await repository.delete(id); return true; },
+      query: (options?: never) => repository.query(options),
+      count: (where?: never) => repository.count(where),
+    }]));
+    const plugin = createPlugin({
+      paymentBridges: {
+        chip: {
+          pluginId: "chip-for-emdash",
+          basePath: "https://chip.test/bridge",
+          eventPath: "https://commerce.test/events",
+          capabilities: ["payment.create"],
+          sharedSecret: "shared-secret",
+          fetcher: async (_url: string, init: RequestInit | undefined) => {
+            const request = JSON.parse(String(init?.body ?? "{}")) as { requestId?: string };
+            return new Response(JSON.stringify({
+              requestId: request.requestId,
+              ok: false,
+              error: { code: "BRIDGE_NOT_CONFIGURED", message: "Commerce bridge is not configured", retryable: false },
+            }), { status: 200 });
+          },
+        } as never,
+      },
+    });
+    const context = (input: unknown, method: string) => ({ input, request: new Request("https://commerce.test", { method }), storage, requestMeta: {} }) as never;
+    const cart = await plugin.routes.cart.handler(context({ line: { productId: "p-1", quantity: 1 } }, "POST")) as { id: string };
+
+    await expect(plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "chip" }, "POST"))).rejects.toThrow(
+      "Payment provider failed: BRIDGE_NOT_CONFIGURED: Commerce bridge is not configured",
+    );
+  });
 });

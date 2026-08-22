@@ -141,7 +141,12 @@ function paymentProviderFor(options: CommercePluginOptions, providerId: string):
         sentAt: new Date().toISOString(),
         payload: { operation: "charge", order },
       });
-      if (!response.ok || !isRecord(response.data) || typeof response.data.checkoutUrl !== "string") {
+      if (!response.ok) {
+        const code = response.error?.code ?? "PROVIDER_ERROR";
+        const message = response.error?.message ?? "Payment bridge rejected the request";
+        throw new Error(`${code}: ${message}`);
+      }
+      if (!isRecord(response.data) || typeof response.data.checkoutUrl !== "string") {
         throw new Error("Payment bridge did not return a checkout URL");
       }
       return {
@@ -349,7 +354,8 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     await repositories.carts.put(cartId, cart as never);
     return { ...storedResult, orderAccessToken: order.orderAccessToken };
   } catch (error) {
-    throw new PluginRouteError("PAYMENT_PROVIDER_ERROR", "Payment provider failed", 502);
+    const detail = error instanceof Error ? error.message : "Unknown payment provider error";
+    throw new PluginRouteError("PAYMENT_PROVIDER_ERROR", `Payment provider failed: ${detail}`, 502);
   }
   } finally {
     release();
