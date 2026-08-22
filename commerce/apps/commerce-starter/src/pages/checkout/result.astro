@@ -1,22 +1,64 @@
 ---
 import Base from "../../layouts/Base.astro";
 const resultStatus = Astro.url.searchParams.get("status")?.toLowerCase() ?? "pending";
+const returnToken = Astro.url.searchParams.get("token") ?? "";
 const title = resultStatus === "success" || resultStatus === "paid" ? "Payment received" : resultStatus === "cancel" || resultStatus === "cancelled" ? "Payment cancelled" : resultStatus === "failure" || resultStatus === "failed" ? "Payment needs attention" : "Payment status";
 const copy = resultStatus === "success" || resultStatus === "paid" ? "Your payment was confirmed. We are preparing the order record." : resultStatus === "cancel" || resultStatus === "cancelled" ? "No payment was completed. Your cart is still available." : resultStatus === "failure" || resultStatus === "failed" ? "The payment did not complete. You can return to checkout and try again." : "We are checking the payment status. Refresh this page if you just returned from CHIP.";
 ---
 <Base title={title} description={copy}>
   <div class="page-wrap section">
     <p class="eyebrow">Checkout result</p>
-    <h1>{title}</h1>
-    <p class="lede">{copy}</p>
-    <p><a class="button" href={resultStatus === "success" || resultStatus === "paid" ? "/" : "/checkout"}>{resultStatus === "success" || resultStatus === "paid" ? "Continue shopping" : "Return to checkout"}</a></p>
+    <h1 id="result-title">{title}</h1>
+    <p id="result-copy" class="lede">{copy}</p>
+    <p id="verification-status" role="status">Checking payment status...</p>
+    <p><a id="continue-link" class="button" href={resultStatus === "success" || resultStatus === "paid" ? "/" : "/checkout"}>{resultStatus === "success" || resultStatus === "paid" ? "Continue shopping" : "Return to checkout"}</a></p>
     <p><a id="order-link" href="/orders/">View your order if you have the order ID.</a></p>
-    <script is:inline define:vars={{ resultStatus }}>
+    <script is:inline define:vars={{ resultStatus, returnToken }}>
       (() => {
+        const titleNode = document.querySelector("#result-title");
+        const copyNode = document.querySelector("#result-copy");
+        const statusNode = document.querySelector("#verification-status");
+        const continueLink = document.querySelector("#continue-link");
         const orderId = window.localStorage.getItem("commerce-order-id");
         const orderLink = document.querySelector("#order-link");
         if (orderId && orderLink instanceof HTMLAnchorElement) orderLink.href = `/orders/${encodeURIComponent(orderId)}`;
-        if ((resultStatus === "success" || resultStatus === "paid") && orderId) window.localStorage.removeItem("commerce-cart-lines");
+
+        const renderStatus = (status) => {
+          const paid = status === "paid";
+          const cancelled = status === "cancelled";
+          const failed = status === "failed";
+          const title = paid ? "Payment received" : cancelled ? "Payment cancelled" : failed ? "Payment needs attention" : "Payment status";
+          const copy = paid ? "Your payment was confirmed. We are preparing the order record." : cancelled ? "No payment was completed. Your cart is still available." : failed ? "The payment did not complete. You can return to checkout and try again." : "We could not confirm the payment yet. Refresh this page or contact support if the issue persists.";
+          if (titleNode) titleNode.textContent = title;
+          if (copyNode) copyNode.textContent = copy;
+          if (statusNode) statusNode.textContent = paid ? "Payment verified." : "";
+          if (continueLink instanceof HTMLAnchorElement) {
+            continueLink.href = paid ? "/" : "/checkout";
+            continueLink.textContent = paid ? "Continue shopping" : "Return to checkout";
+          }
+          if (paid && orderId) window.localStorage.removeItem("commerce-cart-lines");
+        };
+
+        const verifyReturn = async () => {
+          if (!returnToken) {
+            if (statusNode) statusNode.textContent = "";
+            return;
+          }
+          try {
+            const response = await fetch(`/_emdash/api/plugins/chip-for-emdash/return?token=${encodeURIComponent(returnToken)}`, {
+              credentials: "same-origin",
+              headers: { "X-EmDash-Request": "1" },
+            });
+            const envelope = await response.json();
+            const result = envelope?.success === true ? envelope.data : null;
+            renderStatus(result?.verified === true ? String(result.status ?? "unknown") : "unknown");
+          } catch {
+            renderStatus("unknown");
+          }
+        };
+
+        if (resultStatus === "success" || resultStatus === "paid") renderStatus("paid");
+        verifyReturn();
       })();
     </script>
   </div>

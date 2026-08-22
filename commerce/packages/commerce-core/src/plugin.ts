@@ -7,6 +7,7 @@ import { addCartLine } from "./domain/cart.js";
 import type { Cart } from "./domain/cart.js";
 import { createOrderSnapshot } from "./domain/orders.js";
 import type { OrderSnapshot } from "./domain/orders.js";
+import { transitionOrder } from "./domain/order-state.js";
 import {
   catalogRoute,
   productArchiveRoute,
@@ -326,6 +327,9 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
       orderId: checkoutOrderId,
       orderAccessToken,
       currency: cart.currency,
+      paymentProviderId: paymentProvider,
+      status: "pending_payment",
+      paymentStatus: "pending",
       lines,
       customer,
       shippingAddress: body.shippingAddress === undefined ? undefined : withoutUndefined(parseAddressSnapshot(body.shippingAddress)),
@@ -440,6 +444,16 @@ async function bridgeEventsRoute(
     status: "received",
     receivedAt: new Date().toISOString(),
   } as never);
+  const payload = isRecord(event.payload) ? event.payload : undefined;
+  const commerceOrderId = typeof payload?.commerceOrderId === "string" ? payload.commerceOrderId : undefined;
+  if (event.event === "commerce.payment.paid" && commerceOrderId) {
+    const order = await repositories.orders.get(commerceOrderId) as OrderSnapshot | undefined;
+    if (order) {
+      const currentStatus = typeof order.status === "string" ? order.status : "pending_payment";
+      const next = transitionOrder({ ...order, status: currentStatus }, { type: "payment_paid" });
+      await repositories.orders.put(commerceOrderId, { ...order, ...next } as never);
+    }
+  }
   return { ok: true, duplicate: false, deliveryId, eventId };
 }
 

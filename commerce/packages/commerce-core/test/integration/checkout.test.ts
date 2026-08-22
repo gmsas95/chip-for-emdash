@@ -57,9 +57,10 @@ describe("Commerce checkout integration", () => {
     const context = (input: unknown, method: string) => ({ input, request: request(method), storage, requestMeta: {} }) as never;
 
     const cart = await plugin.routes.cart.handler(context({ line: { productId: "p-1", quantity: 2 } }, "POST")) as { id: string };
-    const result = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "payment-provider" }, "POST")) as { checkoutUrl: string; totalMinor: number };
+    const result = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "payment-provider" }, "POST")) as { orderId: string; checkoutUrl: string; totalMinor: number };
 
     expect(result.totalMinor).toBe(2000);
+    expect(await repositories.orders.get(result.orderId)).toMatchObject({ status: "pending_payment", paymentStatus: "pending" });
     const replay = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "payment-provider" }, "POST"));
     expect(replay).toEqual(result);
     expect(paymentCalls).toBe(1);

@@ -93,6 +93,8 @@ describe("CHIP Commerce payment routes", () => {
 
     expect(result).toMatchObject({ ok: true });
     expect(purchaseBody?.client).toEqual({ email: "customer@example.com" });
+    expect(String(purchaseBody?.success_redirect)).toMatch(/^https:\/\/chip\.test\/checkout\/result\?token=[^&]+&status=success$/);
+    expect(String(purchaseBody?.success_callback)).toMatch(/^https:\/\/chip\.test\/_emdash\/api\/plugins\/chip-for-emdash\/return\?token=[^&]+$/);
   });
 });
 

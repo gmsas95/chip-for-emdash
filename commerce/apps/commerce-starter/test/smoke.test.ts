@@ -52,6 +52,11 @@ describe("Commerce starter", () => {
     ]);
     expect(pages.join("\n")).toContain("paymentProvider");
   });
+  it("verifies CHIP returns on the thank-you page", async () => {
+    const source = await read("src/pages/checkout/result.astro");
+    expect(source).toContain("/_emdash/api/plugins/chip-for-emdash/return?token=");
+    expect(source).toContain("verified");
+  });
 
   it("builds Commerce Core before bundling the Worker", async () => {
     const source = await read("package.json");

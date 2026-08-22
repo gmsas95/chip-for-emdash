@@ -1,5 +1,6 @@
 import type { AddressSnapshot, CustomerSnapshot, Money, OrderItem, OrderSnapshot as ContractOrderSnapshot } from "@gmsas95/emdash-commerce-contracts";
 import { calculateTotals } from "./totals.js";
+import type { OrderStatus, PaymentStatus } from "./order-state.js";
 
 export interface OrderSnapshotLine {
   readonly lineId: string;
@@ -25,8 +26,9 @@ export interface OrderSnapshot extends ContractOrderSnapshot {
   readonly customerId?: string;
   readonly paymentProviderId?: string;
   readonly fulfillmentProviderId?: string;
-  readonly status?: string;
+  readonly status?: OrderStatus;
   readonly createdAt: string;
+  readonly paymentStatus?: PaymentStatus;
   readonly orderAccessToken?: string;
 }
 
@@ -60,7 +62,8 @@ export interface CreateOrderSnapshotInput {
   metadata?: Record<string, string>;
   paymentProviderId?: string;
   fulfillmentProviderId?: string;
-  status?: string;
+  status?: OrderStatus;
+  paymentStatus?: PaymentStatus;
   orderAccessToken?: string;
   createdAt?: string;
 }
@@ -182,6 +185,7 @@ export function createOrderSnapshot(input: CreateOrderSnapshotInput): OrderSnaps
     ...(input.orderAccessToken === undefined ? {} : { orderAccessToken: input.orderAccessToken }),
     ...(input.fulfillmentProviderId === undefined ? {} : { fulfillmentProviderId: input.fulfillmentProviderId }),
     ...(input.status === undefined ? {} : { status: input.status }),
+    ...(input.paymentStatus === undefined ? {} : { paymentStatus: input.paymentStatus }),
     createdAt: input.createdAt ?? new Date().toISOString(),
   };
 

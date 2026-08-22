@@ -257,7 +257,10 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 			const paymentId = crypto.randomUUID();
 			const returnToken = crypto.randomUUID();
 			const requestUrl = new URL(routeCtx.request.url);
-			const returnUrl = `${requestUrl.origin}/_emdash/api/plugins/chip-for-emdash/return?token=${returnToken}`;
+			const verifyUrl = `${requestUrl.origin}/_emdash/api/plugins/chip-for-emdash/return?token=${returnToken}`;
+			const successRedirect = `${requestUrl.origin}/checkout/result?token=${encodeURIComponent(returnToken)}&status=success`;
+			const failureRedirect = `${requestUrl.origin}/checkout/result?token=${encodeURIComponent(returnToken)}&status=failure`;
+			const cancelRedirect = `${requestUrl.origin}/checkout/result?token=${encodeURIComponent(returnToken)}&status=cancel`;
 			const callbackAllowed = requestUrl.port === "" || requestUrl.port === "80" || requestUrl.port === "443";
 			const claimRecord = {
 				id: paymentId, purchaseId: "", returnToken, reference: orderId, amount, currency,
@@ -276,10 +279,10 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 					purchase: { currency, products: [{ name, price: amount, quantity: "1" }] },
 					brand_id: auth.settings.brandId,
 					reference: orderId,
-					success_redirect: returnUrl,
-					failure_redirect: returnUrl,
-					cancel_redirect: returnUrl,
-					...(callbackAllowed ? { success_callback: returnUrl } : {}),
+					success_redirect: successRedirect,
+					failure_redirect: failureRedirect,
+					cancel_redirect: cancelRedirect,
+					...(callbackAllowed ? { success_callback: verifyUrl } : {}),
 					metadata: { commerceOrderId: orderId, commercePaymentId: auth.request.requestId, idempotencyKey: auth.request.idempotencyKey },
 				});
 			} catch (error) {
