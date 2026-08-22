@@ -813,6 +813,11 @@ const adminHandler: RouteHandler = async (routeCtx, ctx) => {
 		if (page === "widget:chip-summary") return buildChipWidget(ctx);
 		return { blocks: [] };
 	}
+	if (type === "form_submit" && actionId === "view_payment") {
+		const values = getRecord(interaction, "values") ?? {};
+		const id = getString(values, "paymentId");
+		return id ? buildPaymentDetailPage(ctx, id) : { blocks: [{ type: "banner", title: "Select a payment", description: "Choose a payment record before opening its detail.", variant: "alert" }] };
+	}
 	if (type === "form_submit" && actionId === "save_settings") {
 		return saveSettingsInteraction(ctx, getRecord(interaction, "values") ?? {});
 	}
@@ -1072,6 +1077,27 @@ async function buildPaymentsPage(ctx: PluginContext, cursor: string | undefined)
 					type: "context",
 					text: "Payment attempts recorded by this plugin. Statuses are only ever set from the CHIP API (verify-by-query), never from webhook or query-string data.",
 				},
+				{
+					type: "stats",
+					items: [
+						{ label: "Paid", value: String(rows.filter((row) => row.status === "paid").length) },
+						{ label: "Needs attention", value: String(rows.filter((row) => row.status === "failed").length) },
+						{ label: "Visible records", value: String(rows.length) },
+					],
+				},
+				...(rows.length > 0
+					? [{
+						type: "form",
+						block_id: "payment-detail",
+						fields: [{
+							type: "select",
+							action_id: "paymentId",
+							label: "Open payment detail",
+							options: rows.map((row) => ({ label: `${row.reference} — ${row.status}`, value: row.id })),
+						}],
+						submit: { label: "View payment", action_id: "view_payment" },
+					}]
+					: [{ type: "context", text: "No payment records are available yet." }]),
 				{ type: "divider" },
 				{
 					type: "table",
@@ -1103,6 +1129,45 @@ async function buildPaymentsPage(ctx: PluginContext, cursor: string | undefined)
 			],
 		};
 	}
+}
+
+async function buildPaymentDetailPage(ctx: PluginContext, id: string) {
+	const data = await ctx.storage.payments!.get(id);
+	const record = asPaymentRecord(data);
+	if (!record) {
+		return {
+			blocks: [{
+				type: "banner",
+				title: "Payment not found",
+				description: "The payment record may have been removed or is no longer available.",
+				variant: "error",
+			}],
+		};
+	}
+	return {
+		blocks: [
+			{ type: "header", text: "Payment detail" },
+			{ type: "context", text: "This status was confirmed against CHIP before it was stored." },
+			{
+				type: "fields",
+				fields: [
+					{ label: "Reference", value: record.reference || record.id },
+					{ label: "Status", value: record.status },
+					{ label: "Amount", value: `${record.amount} ${record.currency}` },
+					{ label: "Purchase ID", value: record.purchaseId || "—" },
+					{ label: "Product", value: record.productName || "—" },
+					{ label: "Customer email", value: record.clientEmail || "—" },
+					{ label: "Created", value: record.createdAt },
+					{ label: "Updated", value: record.updatedAt },
+				],
+			},
+			...(record.checkoutUrl ? [{ type: "section", text: "Hosted checkout URL is retained server-side for auditability." }] : []),
+			{
+				type: "actions",
+				elements: [{ type: "button", label: "Back to payments", action_id: "payments_page", style: "primary" }],
+			},
+		],
+	};
 }
 
 async function buildChipWidget(ctx: PluginContext) {

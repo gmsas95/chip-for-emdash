@@ -70,3 +70,45 @@ describe("CHIP Commerce payment routes", () => {
     expect(second).toEqual(first);
   });
 });
+
+describe("CHIP Block Kit admin pages", () => {
+  it("renders a component-based settings form with masked secret fields", async () => {
+    const ctx = baseContext();
+    const result = await chipPlugin.routes.admin.handler(context({ type: "page_load", page: "/settings" }, ctx), ctx as never) as { blocks: Array<Record<string, unknown>> };
+    const form = result.blocks.find((block) => block.type === "form") as { fields?: Array<Record<string, unknown>> } | undefined;
+    expect(form?.fields?.map((field) => field.action_id)).toEqual([
+      "secretKey",
+      "brandId",
+      "publicKey",
+      "successUrl",
+      "failureUrl",
+      "cancelUrl",
+      "commerceBridgeSecret",
+      "commerceEventUrl",
+    ]);
+    expect(form?.fields?.find((field) => field.action_id === "secretKey")).toMatchObject({ type: "secret_input" });
+  });
+
+  it("renders payments as a table and opens a payment detail component", async () => {
+    const ctx = baseContext();
+    await ctx.storage.payments.put("payment-1", {
+      id: "payment-1",
+      purchaseId: "purchase-1",
+      returnToken: "return-token",
+      reference: "order-1",
+      amount: 5000,
+      currency: "MYR",
+      status: "paid",
+      productName: "Tea",
+      createdAt: "2026-08-22T00:00:00.000Z",
+      updatedAt: "2026-08-22T00:00:00.000Z",
+    });
+    const payments = await chipPlugin.routes.admin.handler(context({ type: "page_load", page: "/payments" }, ctx), ctx as never) as { blocks: Array<Record<string, unknown>> };
+    expect(payments.blocks).toEqual(expect.arrayContaining([expect.objectContaining({ type: "table" })]));
+    expect(payments.blocks).toEqual(expect.arrayContaining([expect.objectContaining({ type: "form" })]));
+
+    const detail = await chipPlugin.routes.admin.handler(context({ type: "form_submit", action_id: "view_payment", values: { paymentId: "payment-1" } }, ctx), ctx as never) as { blocks: Array<Record<string, unknown>> };
+    expect(detail.blocks).toEqual(expect.arrayContaining([expect.objectContaining({ type: "header", text: "Payment detail" })]));
+    expect(detail.blocks).toEqual(expect.arrayContaining([expect.objectContaining({ type: "fields" })]));
+  });
+});
