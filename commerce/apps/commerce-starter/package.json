@@ -14,7 +14,7 @@
   "dependencies": {
     "@astrojs/cloudflare": "^14.2.3",
     "@astrojs/react": "^6.0.4",
-    "@chip-in-asia/plugin-chip-for-emdash": "github:gmsas95/chip-for-emdash#3270b86d62b5969fadf8a4f3a822feff8966bbb7",
+    "@chip-in-asia/plugin-chip-for-emdash": "github:gmsas95/chip-for-emdash#6cc86cc4f7f4fae216c3d8f79690b9984e503bca",
     "@emdash-commerce/core": "workspace:*",
     "@gmsas95/emdash-commerce-contracts": "workspace:*",
     "@emdash-cms/cloudflare": "^0.34.0",
