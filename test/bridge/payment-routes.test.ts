@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { getBridgeSigningData } from "@gmsas95/emdash-commerce-contracts";
 import { signBridgePayload } from "../../src/bridge/signature.js";
 import chipPlugin from "../../src/plugin.js";
@@ -118,6 +119,9 @@ describe("CHIP MCP tools", () => {
     const tools = chipPlugin.mcp?.tools ?? {};
     expect(Object.keys(tools)).toEqual(["search", "execute"]);
     expect(tools.execute.destructive).toBe(true);
+  });
+  it("provides native Zod schemas for standard plugin consent serialization", () => {
+    expect(() => z.toJSONSchema(chipPlugin.mcp!.tools.search.input)).not.toThrow();
   });
 
   it("searches payment records through the MCP route", async () => {

@@ -37,8 +37,7 @@
 		"prepare": "npm run build"
 	},
 	"dependencies": {
-		"@gmsas95/emdash-commerce-contracts": "^0.1.2",
-		"zod": "^4.4.3"
+		"@gmsas95/emdash-commerce-contracts": "^0.1.2"
 	},
 	"peerDependencies": {
 		"emdash": ">=0.15.0"
@@ -47,7 +46,8 @@
 		"@emdash-cms/plugin-cli": "^0.8.0",
 		"emdash": "^0.33.0",
 		"typescript": "^5.9.0",
-		"vitest": "^3.2.4"
+		"vitest": "^3.2.4",
+		"zod": "^4.4.3"
 	},
 	"repository": {
 		"type": "git",

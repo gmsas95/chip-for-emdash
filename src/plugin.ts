@@ -27,7 +27,7 @@
 
 import { createCommerceBridgeRoutes, emitCommerceEvent } from "./commerce-bridge.js";
 import { signBridgePayload } from "./bridge/signature.js";
-import type { ZodType } from "zod";
+import { z } from "zod";
 import type { PluginContext, RouteHandler, SandboxedPlugin, SandboxedRouteContext } from "emdash/plugin";
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -92,25 +92,16 @@ interface ChipResult {
 	data: unknown;
 }
 
-const chipMcpSearchInput = {
-	type: "object",
-	properties: {
-		query: { type: "string", maxLength: 200 },
-		status: { type: "string", enum: ["created", "paid", "failed", "cancelled", "hold", "refunded"] },
-		limit: { type: "integer", minimum: 1, maximum: 50 },
-	},
-	additionalProperties: false,
-} as unknown as ZodType;
+const chipMcpSearchInput = z.object({
+	query: z.string().max(200).optional(),
+	status: z.enum(["created", "paid", "failed", "cancelled", "hold", "refunded"]).optional(),
+	limit: z.number().int().min(1).max(50).optional(),
+});
 
-const chipMcpExecuteInput = {
-	type: "object",
-	properties: {
-		operation: { type: "string", enum: ["payment.list", "payment.get", "payment.create", "settings.status", "credentials.test"] },
-		arguments: { type: "object", additionalProperties: true },
-	},
-	required: ["operation"],
-	additionalProperties: false,
-} as unknown as ZodType;
+const chipMcpExecuteInput = z.object({
+	operation: z.enum(["payment.list", "payment.get", "payment.create", "settings.status", "credentials.test"]),
+	arguments: z.record(z.string(), z.unknown()).optional(),
+});
 
 // ── Narrowing helpers ────────────────────────────────────────────────────
 
