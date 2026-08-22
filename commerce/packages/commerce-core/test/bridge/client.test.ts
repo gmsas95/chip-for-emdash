@@ -28,6 +28,28 @@ describe("sendBridgeCommand", () => {
     expect(JSON.parse(requestBody).auth.signature).toEqual(expect.any(String));
     expect(() => parseBridgeRequest(JSON.parse(requestBody))).not.toThrow();
   });
+  it("unwraps the EmDash plugin API envelope before validating the bridge response", async () => {
+    const response = await sendBridgeCommand({
+      pluginId: "payment-provider",
+      basePath: "https://commerce.test/bridge",
+      eventPath: "https://commerce.test/bridge/events",
+      capabilities: ["payment.create"],
+      sharedSecret: "secret",
+      fetcher: async () => new Response(JSON.stringify({
+        success: true,
+        data: { requestId: "req-envelope", ok: true, data: { checkoutUrl: "https://pay.test/envelope" } },
+      }), { status: 200 }),
+    }, {
+      contract: "commerce.payment.create",
+      version: 1,
+      requestId: "req-envelope",
+      idempotencyKey: "idem-envelope",
+      sentAt: new Date().toISOString(),
+      payload: { operation: "charge", order: { orderId: "o-envelope", currency: "USD", items: [], subtotal: { amountMinor: 0, currency: "USD" }, total: { amountMinor: 0, currency: "USD" } } },
+    });
+
+    expect(response).toEqual({ requestId: "req-envelope", ok: true, data: { checkoutUrl: "https://pay.test/envelope" } });
+  });
 
   it("marks authentication failures as non-retryable", async () => {
     const response = await sendBridgeCommand({

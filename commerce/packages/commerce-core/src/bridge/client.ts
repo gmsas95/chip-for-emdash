@@ -66,6 +66,9 @@ export async function sendBridgeCommand<T>(
     } catch {
       return errorResponse(request.requestId, "INVALID_RESPONSE", "Provider returned invalid JSON", false);
     }
+    if (isRecord(payload) && payload.success === true && "data" in payload) {
+      payload = payload.data;
+    }
     if (!isRecord(payload) || payload.requestId !== request.requestId || typeof payload.ok !== "boolean") {
       return errorResponse(request.requestId, "INVALID_RESPONSE", "Provider returned an invalid bridge response", false);
     }
