@@ -121,7 +121,7 @@ const COMMERCE_ADMIN_CSS = `
   margin: 0 auto;
   padding: 32px clamp(20px, 4vw, 56px) 64px;
   color: var(--commerce-ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: var(--font-emdash, ui-sans-serif, system-ui, -apple-system, sans-serif);
 }
 .commerce-admin header {
   display: flex;
@@ -140,13 +140,14 @@ const COMMERCE_ADMIN_CSS = `
 }
 .commerce-admin h1 {
   margin: 0;
-  font-size: clamp(28px, 4vw, 42px);
-  letter-spacing: -.045em;
-  line-height: 1;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -.025em;
+  line-height: 1.15;
 }
-.commerce-admin h2 { margin: 28px 0 14px; font-size: 20px; letter-spacing: -.025em; }
-.commerce-admin h3 { margin: 0 0 10px; font-size: 15px; letter-spacing: -.015em; }
-.commerce-admin p { line-height: 1.55; }
+.commerce-admin h2 { margin: 28px 0 14px; font-size: 20px; font-weight: 650; letter-spacing: -.015em; line-height: 1.25; }
+.commerce-admin h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; letter-spacing: 0; line-height: 1.35; }
+.commerce-admin p { margin: 0 0 12px; font-size: 14px; line-height: 1.5; }
 .commerce-admin table {
   width: 100%;
   border-collapse: separate;
@@ -159,11 +160,11 @@ const COMMERCE_ADMIN_CSS = `
 .commerce-admin th, .commerce-admin td {
   padding: 14px 16px;
   border-bottom: 1px solid var(--commerce-line);
-  text-align: left;
   vertical-align: middle;
   font-size: 13px;
+  line-height: 1.4;
 }
-.commerce-admin th { color: var(--commerce-muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.commerce-admin th { color: var(--commerce-muted); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
 .commerce-admin tbody tr:last-child th, .commerce-admin tbody tr:last-child td { border-bottom: 0; }
 .commerce-admin tbody tr:hover { background: var(--commerce-surface-soft); }
 .commerce-admin form, .commerce-admin article, .commerce-admin section {
@@ -178,8 +179,8 @@ const COMMERCE_ADMIN_CSS = `
   display: grid;
   gap: 6px;
   color: var(--commerce-muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 500;
 }
 .commerce-admin input, .commerce-admin select, .commerce-admin textarea {
   width: 100%;
@@ -193,8 +194,8 @@ const COMMERCE_ADMIN_CSS = `
 }
 .commerce-admin textarea { min-height: 96px; resize: vertical; }
 .commerce-admin input:focus, .commerce-admin select:focus, .commerce-admin textarea:focus {
-  border-color: var(--commerce-accent);
-  outline: 3px solid color-mix(in srgb, var(--commerce-accent) 22%, transparent);
+  border-color: var(--commerce-focus);
+  outline: 3px solid color-mix(in srgb, var(--commerce-focus) 22%, transparent);
 }
 .commerce-admin button {
   color: var(--text-color-kumo-inverse);
