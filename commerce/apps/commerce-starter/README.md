@@ -80,18 +80,30 @@ After deployment:
    EmDash media API and are stored in the configured R2 bucket; product records
    store only media references in D1.
 6. Publish at least one product and confirm it appears at `/shop`.
-7. Open the CHIP settings page directly if the sidebar link is not visible:
+7. Open EmDash Content → Pages and create/publish these slugs:
+   `home`, `about`, `shipping-returns`, `privacy`, `terms`, and `contact`.
+   The Astro storefront reads these entries with `getEmDashEntry` and renders
+   their Portable Text content; edits do not require a code deployment.
+8. Edit EmDash Site Settings for the merchant title, tagline, and logo.
+9. Edit the `primary` and `footer` menus to control storefront navigation.
+10. Upload editorial images through EmDash Media; the Cloudflare starter stores
+    them in R2.
+
+The seed is applied only during an initial EmDash setup. Existing deployments
+are never overwritten; create the page/menu entries manually when upgrading a
+deployment that was initialized before this storefront content layer.
+11. Open the CHIP settings page directly if the sidebar link is not visible:
    `https://<worker-domain>/_emdash/admin/plugins/chip-for-emdash/settings`.
-8. Enter the CHIP secret key and brand ID from the CHIP portal.
-9. Set success, failure, and cancel URLs to
+12. Enter the CHIP secret key and brand ID from the CHIP portal.
+13. Set success, failure, and cancel URLs to
    `https://<worker-domain>/checkout/result?status=success`,
    `https://<worker-domain>/checkout/result?status=failure`, and
    `https://<worker-domain>/checkout/result?status=cancel`.
-10. Set **Commerce Bridge Secret** to the same `COMMERCE_BRIDGE_SECRET` value.
-11. Set **Commerce Event URL** to
+14. Set **Commerce Bridge Secret** to the same `COMMERCE_BRIDGE_SECRET` value.
+15. Set **Commerce Event URL** to
     `https://<worker-domain>/_emdash/api/plugins/emdash-commerce/bridge/events`.
-12. Use the built-in credential test before enabling live payments.
-13. Complete a CHIP test payment from `/checkout`, then verify the order,
+16. Use the built-in credential test before enabling live payments.
+17. Complete a CHIP test payment from `/checkout`, then verify the order,
     customer, inventory, and payment record in the admin.
 
 The CHIP plugin keeps the secret key server-side, verifies browser returns and callbacks by re-fetching the confirmed CHIP purchase, and uses idempotent Commerce bridge deliveries. Do not put CHIP credentials or the bridge secret in browser code.
