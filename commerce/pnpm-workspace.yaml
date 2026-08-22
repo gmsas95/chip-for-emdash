@@ -3,4 +3,4 @@ packages:
   - "apps/*"
 
 onlyBuiltDependencies:
-  - "@chip-in-asia/plugin-chip-for-emdash@https://codeload.github.com/gmsas95/chip-for-emdash/tar.gz/8c28b67d104c7e0d8e0bf026fca6d2ab2a252647"
+  - "@chip-in-asia/plugin-chip-for-emdash@https://codeload.github.com/gmsas95/chip-for-emdash/tar.gz/645d0710a2962c04642eb48559aa5bd8c412ea6d"
