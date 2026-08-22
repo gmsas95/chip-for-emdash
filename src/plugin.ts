@@ -26,6 +26,7 @@
  */
 
 import { createCommerceBridgeRoutes, emitCommerceEvent } from "./commerce-bridge.js";
+import { signBridgePayload } from "./bridge/signature.js";
 import type { PluginContext, RouteHandler, SandboxedPlugin, SandboxedRouteContext } from "emdash/plugin";
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -711,6 +712,7 @@ const callbackHandler: RouteHandler = async (routeCtx, ctx) => {
 				ctx.log.error("Failed to emit Commerce payment event", error);
 			}
 		}
+		return { ok: true };
 	} catch (error) {
 		// Never fail a webhook response — CHIP retries non-2xx and storms the site.
 		ctx.log.error("CHIP webhook handling failed", error);
@@ -846,16 +848,23 @@ async function retryCommerceEvents(ctx: PluginContext): Promise<void> {
 	for (const item of pending?.items ?? []) {
 		const record = item.data as Record<string, unknown>;
 		const nextAttemptAt = typeof record.nextAttemptAt === "string" ? Date.parse(record.nextAttemptAt) : 0;
-		if (Number.isFinite(nextAttemptAt) && nextAttemptAt > now) continue;
-		if (!ctx.http || typeof record.eventUrl !== "string" || typeof record.body !== "string" || typeof record.signature !== "string" || typeof record.timestamp !== "string") continue;
+if (Number.isFinite(nextAttemptAt) && nextAttemptAt > now) continue;
+		if (!ctx.http || typeof record.eventUrl !== "string" || typeof record.body !== "string") continue;
+		let timestamp = typeof record.timestamp === "string" ? record.timestamp : new Date().toISOString();
+		let signature = typeof record.signature === "string" ? record.signature : "";
+		const settings = await loadSettings(ctx);
+		if (settings.commerceBridgeSecret) {
+			timestamp = new Date().toISOString();
+			signature = await signBridgePayload(settings.commerceBridgeSecret, timestamp, record.body);
+		}
 		try {
 			const response = await ctx.http.fetch(record.eventUrl, {
 				method: "POST",
 				headers: {
 					"content-type": "application/json",
 					"x-emdash-provider-id": "chip",
-					"x-emdash-bridge-signature": record.signature,
-					"x-emdash-bridge-timestamp": record.timestamp,
+					"x-emdash-bridge-signature": signature,
+					"x-emdash-bridge-timestamp": timestamp,
 				},
 				body: record.body,
 			});
