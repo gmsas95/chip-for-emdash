@@ -197,6 +197,12 @@ const COMMERCE_ADMIN_CSS = `
   border-color: var(--commerce-focus);
   outline: 3px solid color-mix(in srgb, var(--commerce-focus) 22%, transparent);
 }
+.commerce-admin select:disabled, .commerce-admin input:disabled, .commerce-admin button:disabled {
+  opacity: .5;
+  background: var(--commerce-surface-soft);
+  color: var(--commerce-muted);
+  cursor: not-allowed;
+}
 .commerce-admin button {
   color: var(--text-color-kumo-inverse);
   cursor: pointer;

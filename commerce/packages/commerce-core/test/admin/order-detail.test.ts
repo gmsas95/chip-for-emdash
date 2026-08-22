@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandLabel, formatOrderRef, statusLabel, statusTransitionOptions } from "../../src/admin/OrderDetail.js";
+import { commandLabel, formatOrderRef, statusLabel, statusTransitionOptions, terminalHint } from "../../src/admin/OrderDetail.js";
 
 describe("Commerce order detail presentation", () => {
   it("labels every order status in operator language", () => {
@@ -36,5 +36,15 @@ describe("Commerce order reference formatting", () => {
   it("shortens long internal ids to a readable reference", () => {
     expect(formatOrderRef({ id: "8738a4d1-bc00-45b1-b6f6-6520f9886816" })).toBe("#8738A4D1");
     expect(formatOrderRef({ orderId: "short-one" })).toBe("#short-one");
+  });
+});
+
+describe("Commerce terminal-state hints", () => {
+  it("explains why no actions are available", () => {
+    expect(terminalHint("cancelled")).toMatch(/cancelled/i);
+    expect(terminalHint("completed")).toMatch(/completed/i);
+    expect(terminalHint("refunded")).toMatch(/refunded/i);
+    expect(terminalHint("pending_payment")).toBe("");
+    expect(terminalHint(undefined)).toBe("");
   });
 });

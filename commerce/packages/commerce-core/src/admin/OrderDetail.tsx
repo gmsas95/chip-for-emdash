@@ -40,6 +40,17 @@ export function formatOrderRef(order: { orderNumber?: number; id?: string; order
   return raw.length > 12 ? `#${raw.slice(0, 8).toUpperCase()}` : `#${raw}`;
 }
 
+const TERMINAL_HINTS: Record<string, string> = {
+  cancelled: "This order is cancelled and can no longer be changed.",
+  completed: "This order is completed and can no longer be changed.",
+  refunded: "This order has been refunded and can no longer be changed.",
+};
+
+export function terminalHint(status?: string): string {
+  if (status !== undefined && TERMINAL_HINTS[status]) return TERMINAL_HINTS[status];
+  return statusLabel(status) === "Unknown" ? "" : "";
+}
+
 export interface StatusTransitionOption {
   command: string;
   label: string;
@@ -132,6 +143,7 @@ export function OrderDetail({ orderId, apiBasePath, onChanged }: AdminPageProps 
   }
 
   async function applyStatus(command: string): Promise<void> {
+    if (command === "cancel" && !window.confirm("Cancel this order? Cancelled orders are final and reserved stock will be returned.")) return;
     try {
       await statusMutation.submit({ orderId, command });
       afterMutation();
@@ -203,6 +215,9 @@ export function OrderDetail({ orderId, apiBasePath, onChanged }: AdminPageProps 
               </div>
               {(statusMutation.error ?? refundMutation.error) ? (
                 <p role="alert">{statusMutation.error ?? refundMutation.error}</p>
+              ) : null}
+              {busy ? null : transitions.length === 0 ? (
+                <p role="status" style={{ margin: 0, color: "var(--commerce-muted)" }}>{terminalHint(order.status)}</p>
               ) : null}
             </section>
             <section aria-labelledby="commerce-order-items">
