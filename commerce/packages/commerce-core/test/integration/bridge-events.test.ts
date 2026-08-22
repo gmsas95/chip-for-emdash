@@ -48,6 +48,30 @@ function paymentEvent(): PaymentEvent {
   };
 }
 
+function eventNamed(name: string, status: string): PaymentEvent {
+  const base = paymentEvent();
+  return { ...base, eventId: `event-${name}`, deliveryId: `delivery-${name}`, event: name, payload: { ...base.payload, status } };
+}
+
+async function seedOrderWithReservation(repositories: ReturnType<typeof createMemoryRepositories>, orderStatus: string): Promise<void> {
+  await repositories.orders.put("order-1", { id: "order-1", orderId: "order-1", status: orderStatus, paymentStatus: orderStatus === "paid" ? "paid" : "pending", lines: [] } as never);
+  await repositories.inventory.put("inv-1", { productId: "p-1", sku: "TEA", status: "active", available: 3, reserved: 2, updatedAt: new Date().toISOString() });
+  await repositories.reservations.put("res-order-1:line-1", {
+    id: "res-order-1:line-1",
+    orderId: "order-1",
+    sku: "TEA",
+    quantity: 2,
+    remaining: 0,
+    status: orderStatus === "paid" ? "confirmed" : "active",
+    idempotencyKey: "order-1:line-1",
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    inventoryId: "inv-1",
+    productId: "p-1",
+    lineId: "line-1",
+    createdAt: new Date().toISOString(),
+  });
+}
+
 async function eventContext(event: PaymentEvent, storage: Record<string, unknown>) {
   const timestamp = new Date().toISOString();
   const signature = await signBridgePayload("shared-secret", timestamp, getCommerceEventSigningData(event));
@@ -91,5 +115,72 @@ describe("Commerce bridge payment events", () => {
 
     expect(duplicate).toEqual({ ok: true, duplicate: true, deliveryId: "delivery-1" });
     expect(await repositories.orders.get("order-1")).toMatchObject({ status: "paid", paymentStatus: "paid" });
+  });
+
+  it("confirms reservations and consumes the hold when payment succeeds", async () => {
+    const repositories = createMemoryRepositories();
+    await seedOrderWithReservation(repositories, "pending_payment");
+    const plugin = createPlugin({ bridgeSecrets: { chip: "shared-secret" } });
+    const storage = storageFrom(repositories);
+
+    await plugin.routes["bridge/events"].handler(await eventContext(paymentEvent(), storage));
+
+    expect(await repositories.orders.get("order-1")).toMatchObject({ status: "paid", paymentStatus: "paid" });
+    expect(await repositories.inventory.get("inv-1")).toMatchObject({ available: 3, reserved: 0 });
+    const reservation = await repositories.reservations.get("res-order-1:line-1");
+    expect(reservation).toMatchObject({ status: "confirmed", quantity: 2 });
+  });
+
+  it("marks the order failed and restores stock on payment_failed", async () => {
+    const repositories = createMemoryRepositories();
+    await seedOrderWithReservation(repositories, "pending_payment");
+    const plugin = createPlugin({ bridgeSecrets: { chip: "shared-secret" } });
+    const storage = storageFrom(repositories);
+
+    const result = await plugin.routes["bridge/events"].handler(await eventContext(eventNamed("commerce.payment.failed", "failed"), storage));
+
+    expect(result).toMatchObject({ ok: true, deliveryId: "delivery-commerce.payment.failed" });
+    expect(await repositories.orders.get("order-1")).toMatchObject({ status: "failed", paymentStatus: "failed" });
+    expect(await repositories.inventory.get("inv-1")).toMatchObject({ available: 5, reserved: 0 });
+    expect(await repositories.reservations.get("res-order-1:line-1")).toMatchObject({ status: "released" });
+  });
+
+  it("cancels a pending order on payment_cancelled", async () => {
+    const repositories = createMemoryRepositories();
+    await seedOrderWithReservation(repositories, "pending_payment");
+    const plugin = createPlugin({ bridgeSecrets: { chip: "shared-secret" } });
+    const storage = storageFrom(repositories);
+
+    await plugin.routes["bridge/events"].handler(await eventContext(eventNamed("commerce.payment.cancelled", "cancelled"), storage));
+
+    expect(await repositories.orders.get("order-1")).toMatchObject({ status: "cancelled" });
+    expect(await repositories.inventory.get("inv-1")).toMatchObject({ available: 5, reserved: 0 });
+    expect(await repositories.reservations.get("res-order-1:line-1")).toMatchObject({ status: "released" });
+  });
+
+  it("refunds a paid order and restores stock on payment_refunded", async () => {
+    const repositories = createMemoryRepositories();
+    await seedOrderWithReservation(repositories, "paid");
+    const plugin = createPlugin({ bridgeSecrets: { chip: "shared-secret" } });
+    const storage = storageFrom(repositories);
+
+    await plugin.routes["bridge/events"].handler(await eventContext(eventNamed("commerce.payment.refunded", "refunded"), storage));
+
+    expect(await repositories.orders.get("order-1")).toMatchObject({ status: "refunded", paymentStatus: "refunded" });
+    expect(await repositories.inventory.get("inv-1")).toMatchObject({ available: 5, reserved: 0 });
+    expect(await repositories.reservations.get("res-order-1:line-1")).toMatchObject({ status: "released" });
+  });
+
+  it("records out-of-order events without corrupting state", async () => {
+    const repositories = createMemoryRepositories();
+    await seedOrderWithReservation(repositories, "pending_payment");
+    const plugin = createPlugin({ bridgeSecrets: { chip: "shared-secret" } });
+    const storage = storageFrom(repositories);
+
+    const result = await plugin.routes["bridge/events"].handler(await eventContext(eventNamed("commerce.payment.refunded", "refunded"), storage));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(await repositories.orders.get("order-1")).toMatchObject({ status: "pending_payment" });
+    expect(await repositories.inventory.get("inv-1")).toMatchObject({ available: 3, reserved: 2 });
   });
 });

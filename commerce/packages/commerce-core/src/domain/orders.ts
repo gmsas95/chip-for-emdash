@@ -5,6 +5,7 @@ import type { OrderStatus, PaymentStatus } from "./order-state.js";
 export interface OrderSnapshotLine {
   readonly lineId: string;
   readonly productId?: string;
+  readonly variantId?: string;
   readonly name: string;
   readonly quantity: number;
   readonly unitAmountMinor: number;
@@ -35,6 +36,7 @@ export interface OrderSnapshot extends ContractOrderSnapshot {
 export interface OrderSnapshotLineInput {
   lineId?: string;
   productId?: string;
+  variantId?: string;
   name?: string;
   quantity: number;
   unitAmountMinor?: number;
@@ -143,6 +145,7 @@ export function createOrderSnapshot(input: CreateOrderSnapshotInput): OrderSnaps
     return {
       lineId,
       ...(line.productId === undefined ? {} : { productId: line.productId }),
+      ...(line.variantId === undefined ? {} : { variantId: line.variantId }),
       name,
       quantity: line.quantity,
       unitAmountMinor,

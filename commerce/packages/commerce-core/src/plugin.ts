@@ -8,6 +8,7 @@ import type { Cart } from "./domain/cart.js";
 import { createOrderSnapshot } from "./domain/orders.js";
 import type { OrderSnapshot } from "./domain/orders.js";
 import { transitionOrder } from "./domain/order-state.js";
+import type { OrderCommand } from "./domain/order-state.js";
 import {
   catalogRoute,
   productArchiveRoute,
@@ -23,6 +24,14 @@ import type { BridgeConnection } from "./bridge/client.js";
 import { COMMERCE_COLLECTION_INDEXES } from "./storage/collections.js";
 import { createEmDashRepositories } from "./storage/repositories.js";
 import type { CommerceRepositories, EmDashCommerceStorage } from "./storage/repositories.js";
+import { InsufficientStockError, confirmOrderReservations, expireDueReservations, releaseOrderReservations, reserveOrderStock } from "./storage/reservations.js";
+
+const PAYMENT_EVENT_COMMANDS: Record<string, OrderCommand["type"]> = {
+  "commerce.payment.paid": "payment_paid",
+  "commerce.payment.failed": "payment_failed",
+  "commerce.payment.cancelled": "cancel",
+  "commerce.payment.refunded": "payment_refunded",
+};
 
 const PLUGIN_ID = "emdash-commerce";
 const PLUGIN_VERSION = "0.2.0";
@@ -248,6 +257,11 @@ async function cartRoute(context: RouteContext): Promise<unknown> {
   return publicCart(cart);
 }
 
+async function revertCartToActive(repositories: CommerceRepositories, cartId: string, cart: Cart): Promise<void> {
+  const { checkoutKey: _checkoutKey, checkoutOrderId: _checkoutOrderId, checkoutResult: _checkoutResult, ...reverted } = cart;
+  await repositories.carts.put(cartId, { ...reverted, status: "active" } as never);
+}
+
 async function checkoutRoute(options: CommercePluginOptions, context: RouteContext): Promise<unknown> {
   requireMethod(context, "POST");
   const body = requestBody(context);
@@ -313,6 +327,7 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
       return {
         lineId: line.lineId,
         productId: line.productId,
+        ...(line.variantId === undefined ? {} : { variantId: line.variantId }),
         name: typeof catalog.name === "string" ? catalog.name : line.name,
         quantity: line.quantity,
         unitAmountMinor: catalog.priceMinor,
@@ -335,11 +350,16 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
       shippingAddress: body.shippingAddress === undefined ? undefined : withoutUndefined(parseAddressSnapshot(body.shippingAddress)),
     });
   } catch (error) {
-    cart.status = "active";
-    cart.checkoutKey = undefined;
-    cart.checkoutOrderId = undefined;
-    await repositories.carts.put(cartId, cart as never);
+    await revertCartToActive(repositories, cartId, cart);
+    if (error instanceof PluginRouteError) throw error;
     throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid checkout");
+  }
+  try {
+    await reserveOrderStock(repositories, order);
+  } catch (error) {
+    await revertCartToActive(repositories, cartId, cart);
+    if (error instanceof InsufficientStockError) throw PluginRouteError.conflict(error.message);
+    throw error;
   }
   await repositories.orders.put(order.id, order);
   try {
@@ -358,6 +378,11 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     await repositories.carts.put(cartId, cart as never);
     return { ...storedResult, orderAccessToken: order.orderAccessToken };
   } catch (error) {
+    try {
+      await releaseOrderReservations(repositories, order.id);
+    } catch {
+      context.log?.warn?.("Failed to release reservations after payment provider error", { orderId: order.id });
+    }
     const detail = error instanceof Error ? error.message : "Unknown payment provider error";
     throw new PluginRouteError("PAYMENT_PROVIDER_ERROR", `Payment provider failed: ${detail}`, 502);
   }
@@ -399,6 +424,64 @@ async function ordersRoute(context: RouteContext): Promise<unknown> {
     throw PluginRouteError.notFound("Order not found");
   }
   return order;
+}
+
+async function refundOrderRoute(options: CommercePluginOptions, context: RouteContext): Promise<unknown> {
+  requireMethod(context, "POST");
+  const body = requestBody(context);
+  if (typeof body.orderId !== "string") {
+    throw PluginRouteError.badRequest("orderId is required");
+  }
+  const repositories = repositoriesFromContext(context);
+  const order = await repositories.orders.get(body.orderId) as OrderSnapshot | undefined;
+  if (!order) {
+    throw PluginRouteError.notFound("Order not found");
+  }
+  const publicOrderId = order.orderId ?? order.id;
+  const currentStatus = typeof order.status === "string" ? order.status : "pending_payment";
+  if (currentStatus === "refunded" || order.paymentStatus === "refunded") {
+    return { orderId: publicOrderId, refundStatus: "refunded", message: "Order is already refunded" };
+  }
+  let refundedOrder: OrderSnapshot;
+  try {
+    refundedOrder = transitionOrder({ ...order, status: currentStatus }, { type: "payment_refunded" }) as unknown as OrderSnapshot;
+  } catch {
+    throw PluginRouteError.conflict("Order payment is not refundable");
+  }
+  const providerId = typeof order.paymentProviderId === "string" ? order.paymentProviderId : "";
+  const connection = options.paymentBridges?.[providerId];
+  if (!connection) {
+    throw PluginRouteError.badRequest(`Payment provider ${providerId || "(unknown)"} does not support refunds`);
+  }
+  const response = await sendBridgeCommand(connection, {
+    contract: "commerce.payment.refund",
+    version: 1,
+    requestId: `refund-${order.id}`,
+    idempotencyKey: `refund:${order.id}`,
+    sentAt: new Date().toISOString(),
+    payload: { operation: "refund", paymentId: publicOrderId },
+  });
+  if (!response.ok) {
+    const code = response.error?.code ?? "PROVIDER_ERROR";
+    const message = response.error?.message ?? "Payment provider rejected the refund";
+    throw new PluginRouteError(code, message, code === "NOT_FOUND" ? 404 : 502);
+  }
+  const data = isRecord(response.data) ? response.data : {};
+  const message = typeof data.message === "string" ? data.message : "Refund recorded";
+  if (data.status === "MANUAL_PROVIDER_ACTION") {
+    await repositories.orders.put(order.id, {
+      ...order,
+      metadata: { ...(order.metadata ?? {}), commerceRefundRequested: "true", commerceRefundRequestId: String(data.paymentId ?? order.id) },
+      updatedAt: new Date().toISOString(),
+    } as never);
+    return { orderId: publicOrderId, refundStatus: "requested", message };
+  }
+  if (data.status !== "refunded") {
+    throw new PluginRouteError("UNSUPPORTED_REFUND_RESULT", `Unexpected refund result from payment provider: ${String(data.status)}`, 502);
+  }
+  await repositories.orders.put(order.id, { ...refundedOrder, updatedAt: new Date().toISOString() } as never);
+  await releaseOrderReservations(repositories, order.id);
+  return { orderId: publicOrderId, refundStatus: "refunded", message };
 }
 
 async function bridgeEventsRoute(
@@ -446,12 +529,25 @@ async function bridgeEventsRoute(
   } as never);
   const payload = isRecord(event.payload) ? event.payload : undefined;
   const commerceOrderId = typeof payload?.commerceOrderId === "string" ? payload.commerceOrderId : undefined;
-  if (event.event === "commerce.payment.paid" && commerceOrderId) {
+  const commandType = PAYMENT_EVENT_COMMANDS[event.event];
+  if (commandType && commerceOrderId) {
     const order = await repositories.orders.get(commerceOrderId) as OrderSnapshot | undefined;
     if (order) {
       const currentStatus = typeof order.status === "string" ? order.status : "pending_payment";
-      const next = transitionOrder({ ...order, status: currentStatus }, { type: "payment_paid" });
-      await repositories.orders.put(commerceOrderId, { ...order, ...next } as never);
+      let next: ReturnType<typeof transitionOrder>;
+      try {
+        next = transitionOrder({ ...order, status: currentStatus }, { type: commandType } as OrderCommand);
+      } catch {
+        next = undefined as unknown as ReturnType<typeof transitionOrder>;
+      }
+      if (next) {
+        await repositories.orders.put(commerceOrderId, { ...order, ...next } as never);
+        if (commandType === "payment_paid") {
+          await confirmOrderReservations(repositories, commerceOrderId);
+        } else {
+          await releaseOrderReservations(repositories, commerceOrderId);
+        }
+      }
     }
   }
   return { ok: true, duplicate: false, deliveryId, eventId };
@@ -502,6 +598,7 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       checkout: { public: true, handler: (context) => checkoutRoute(options, context) },
       order: { public: true, handler: publicOrderRoute },
       orders: { public: false, handler: ordersRoute },
+      "orders/refund": { public: false, handler: (context) => refundOrderRoute(options, context) },
       "mcp/search": { public: false, permission: "plugins:manage", handler: commerceMcpSearchRoute },
       "mcp/execute": { public: false, permission: "plugins:manage", handler: commerceMcpExecuteRoute },
       "bridge/events": { public: true, handler: (context) => bridgeEventsRoute(options, replayStore, context) },
@@ -528,7 +625,11 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       "plugin:activate": async (_event, context) => {
         await context.cron?.schedule("order-access-token-migration", { schedule: "*/5 * * * *" });
       },
-      cron: async (_event, context) => migrateOrderAccessTokens(context),
+      cron: async (_event, context) => {
+        await migrateOrderAccessTokens(context);
+        const repositories = createEmDashRepositories(context.storage as unknown as EmDashCommerceStorage);
+        await expireDueReservations(repositories);
+      },
     },
     admin: {
       entry: "@emdash-commerce/core/admin",
