@@ -26,7 +26,7 @@ function baseContext() {
   };
 }
 
-async function signedCreate() {
+async function signedCreate(customerEmail?: string) {
   const timestamp = new Date().toISOString();
   const request = {
     contract: "commerce.payment.create",
@@ -43,6 +43,7 @@ async function signedCreate() {
         items: [],
         subtotal: { amountMinor: 5000, currency: "USD" },
         total: { amountMinor: 5000, currency: "USD" },
+        ...(customerEmail ? { customer: { email: customerEmail } } : {}),
       },
     },
   };
@@ -79,6 +80,19 @@ describe("CHIP Commerce payment routes", () => {
     const result = await route.handler(context(request, ctx), ctx as never);
 
     expect(result).toMatchObject({ ok: false, error: { code: "PROVIDER_ERROR", message: "CHIP secret key is not configured" } });
+  });
+  it("forwards Commerce customer email to CHIP purchase creation", async () => {
+    const route = chipPlugin.routes["commerce/payment/create"];
+    const ctx = baseContext();
+    let purchaseBody: Record<string, unknown> | undefined;
+    ctx.http.fetch = async (_url: string, init: RequestInit | undefined) => {
+      purchaseBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      return new Response(JSON.stringify({ id: "purchase-1", checkout_url: "https://payments.example.test/checkout/1" }), { status: 200 });
+    };
+    const result = await route.handler(context(await signedCreate("customer@example.com"), ctx), ctx as never);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(purchaseBody?.client).toEqual({ email: "customer@example.com" });
   });
 });
 

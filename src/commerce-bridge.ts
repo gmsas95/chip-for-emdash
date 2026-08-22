@@ -272,7 +272,7 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 			let created: { purchase?: Record<string, unknown>; error?: string; retryable?: boolean };
 			try {
 				created = await deps.createChipPurchase(ctx, {
-					client: {},
+					client: isRecord(order.customer) && typeof order.customer.email === "string" ? { email: order.customer.email } : {},
 					purchase: { currency, products: [{ name, price: amount, quantity: "1" }] },
 					brand_id: auth.settings.brandId,
 					reference: orderId,
