@@ -55,3 +55,20 @@ describe("createOrderSnapshot", () => {
     expect(order.totalMinor).toBe(2480);
   });
 });
+
+describe("order numbers", () => {
+  it("attaches the provided sequential order number to the snapshot", () => {
+    const order = createOrderSnapshot({
+      orderId: "order-1",
+      currency: "USD",
+      orderNumber: 1001,
+      lines: [{ name: "Tea", quantity: 1, priceMinor: 500 }],
+    });
+    expect(order.orderNumber).toBe(1001);
+  });
+
+  it("omits the order number when it is not provided", () => {
+    const order = createOrderSnapshot({ orderId: "order-2", currency: "USD", lines: [{ name: "Tea", quantity: 1, priceMinor: 500 }] });
+    expect(order.orderNumber).toBeUndefined();
+  });
+});

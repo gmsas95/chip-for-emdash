@@ -133,3 +133,57 @@ describe("Commerce admin order notes", () => {
     await expect(plugin.routes["orders/notes"].handler(postContext(storageFor(repositories), { orderId: "missing", note: "x" }))).rejects.toThrow("Order not found");
   });
 });
+
+describe("Commerce order numbers", () => {
+  it("assigns incrementing short numbers at checkout", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 500, currency: "USD" });
+    const plugin = createPlugin({
+      paymentProviders: { "payment-provider": { createPayment: async ({ order }) => ({ checkoutUrl: `https://pay.test/${order.orderId}` }) } },
+    });
+    const kvStore = new Map<string, number>();
+    const context = (input: unknown) => ({
+      input,
+      request: new Request("https://commerce.test", { method: "POST" }),
+      storage: storageFor(repositories),
+      requestMeta: {},
+      kv: {
+        get: async (key: string) => kvStore.get(key),
+        set: async (key: string, value: number) => { kvStore.set(key, value); },
+      },
+    }) as never;
+
+    const cart = await plugin.routes.cart.handler(context({ line: { productId: "p-1", quantity: 1 } })) as { id: string };
+    const first = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "payment-provider" })) as { orderId: string };
+    const secondCart = await plugin.routes.cart.handler(context({ line: { productId: "p-1", quantity: 2 } })) as { id: string };
+    const second = await plugin.routes.checkout.handler(context({ cartId: secondCart.id, paymentProvider: "payment-provider" })) as { orderId: string };
+
+    expect(await repositories.orders.get(first.orderId)).toMatchObject({ orderNumber: 1001 });
+    expect(await repositories.orders.get(second.orderId)).toMatchObject({ orderNumber: 1002 });
+  });
+
+  it("falls back to a count-derived number when kv is unavailable", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 500, currency: "USD" });
+    const plugin = createPlugin({
+      paymentProviders: { "payment-provider": { createPayment: async ({ order }) => ({ checkoutUrl: `https://pay.test/${order.orderId}` }) } },
+    });
+    const context = (input: unknown) => ({ input, request: new Request("https://commerce.test", { method: "POST" }), storage: storageFor(repositories), requestMeta: {} }) as never;
+    const cart = await plugin.routes.cart.handler(context({ line: { productId: "p-1", quantity: 1 } })) as { id: string };
+    const result = await plugin.routes.checkout.handler(context({ cartId: cart.id, paymentProvider: "payment-provider" })) as { orderId: string };
+
+    expect(await repositories.orders.get(result.orderId)).toMatchObject({ orderNumber: 1001 });
+  });
+});
+
+describe("Commerce legacy order backfill", () => {
+  it("gives statusless legacy orders a pending_payment state during cron", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.orders.put("legacy-1", { id: "legacy-1", orderId: "legacy-1", currency: "USD", lines: [], items: [], createdAt: new Date().toISOString() } as never);
+    const plugin = createPlugin();
+
+    await plugin.hooks?.cron?.handler({ name: "commerce-maintenance", scheduledAt: new Date().toISOString() }, { storage: storageFor(repositories) } as never);
+
+    expect(await repositories.orders.get("legacy-1")).toMatchObject({ status: "pending_payment", paymentStatus: "pending" });
+  });
+});

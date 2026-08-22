@@ -264,6 +264,16 @@ async function revertCartToActive(repositories: CommerceRepositories, cartId: st
   await repositories.carts.put(cartId, { ...reverted, status: "active" } as never);
 }
 
+async function nextOrderNumber(context: RouteContext, repositories: CommerceRepositories): Promise<number> {
+  if (context.kv) {
+    const last = await context.kv.get<number>("state:lastOrderNumber");
+    const next = (typeof last === "number" ? last : 1000) + 1;
+    await context.kv.set("state:lastOrderNumber", next);
+    return next;
+  }
+  return (await repositories.orders.count()) + 1001;
+}
+
 async function checkoutRoute(options: CommercePluginOptions, context: RouteContext): Promise<unknown> {
   requireMethod(context, "POST");
   const body = requestBody(context);
@@ -340,9 +350,11 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     const customerInput = parseCustomerInput(body.customer);
     preparedCustomer = customerInput === undefined ? undefined : await prepareCustomer(repositories, customerInput);
     const customer = preparedCustomer?.snapshot;
+    const orderNumber = await nextOrderNumber(context, repositories);
     order = createOrderSnapshot({
       orderId: checkoutOrderId,
       orderAccessToken,
+      orderNumber,
       currency: cart.currency,
       paymentProviderId: paymentProvider,
       status: "pending_payment",
@@ -633,6 +645,24 @@ async function bridgeEventsRoute(
   return { ok: true, duplicate: false, deliveryId, eventId };
 }
 
+async function backfillLegacyOrderStatuses(context: PluginContext): Promise<void> {
+  let cursor: string | undefined;
+  do {
+    const page = await context.storage.orders?.query({ limit: 100, ...(cursor === undefined ? {} : { cursor }) });
+    if (!page) return;
+    for (const { id, data } of page.items) {
+      if (!isRecord(data) || typeof data.status === "string") continue;
+      await context.storage.orders?.put(id, {
+        ...data,
+        status: "pending_payment",
+        paymentStatus: "pending",
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor !== undefined);
+}
+
 async function migrateOrderAccessTokens(ctx: PluginContext): Promise<void> {
   let cursor: string | undefined;
   do {
@@ -709,6 +739,7 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       },
       cron: async (_event, context) => {
         await migrateOrderAccessTokens(context);
+        await backfillLegacyOrderStatuses(context);
         const repositories = createEmDashRepositories(context.storage as unknown as EmDashCommerceStorage);
         await expireDueReservations(repositories);
       },

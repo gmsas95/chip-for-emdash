@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { OrderDetail } from "./OrderDetail.js";
+import { formatOrderRef, OrderDetail } from "./OrderDetail.js";
 import { AdminPageShell, DataState, formatMinorAmount, useCommerceData, type AdminPageElement, type AdminPageProps } from "./shared.js";
 
 interface OrderRow {
@@ -12,6 +12,7 @@ interface OrderRow {
     lines?: Array<{ name: string; quantity: number; totalMinor: number }>;
     customer?: { name?: string; email?: string };
     paymentProviderId?: string;
+    orderNumber?: number;
   };
 }
 
@@ -111,7 +112,7 @@ export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
                 style={{ cursor: "pointer" }}
                 onClick={() => setSelectedOrderId(id)}
               >
-                <th scope="row">{data.orderId ?? id}</th>
+                <th scope="row" title={data.orderId ?? id}>{formatOrderRef({ orderNumber: data.orderNumber, orderId: data.orderId, id })}</th>
                 <td>{data.customer?.name ?? data.customer?.email ?? "Guest"}</td>
                 <td>{formatMinorAmount(data.totalMinor ?? 0, data.currency ?? "MYR")}</td>
                 <td>{data.paymentProviderId ?? "—"}</td>

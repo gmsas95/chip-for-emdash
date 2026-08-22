@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandLabel, statusLabel, statusTransitionOptions } from "../../src/admin/OrderDetail.js";
+import { commandLabel, formatOrderRef, statusLabel, statusTransitionOptions } from "../../src/admin/OrderDetail.js";
 
 describe("Commerce order detail presentation", () => {
   it("labels every order status in operator language", () => {
@@ -25,5 +25,16 @@ describe("Commerce order detail presentation", () => {
   it("offers no transitions for terminal states", () => {
     expect(statusTransitionOptions({ status: "completed", paymentStatus: "paid", fulfillmentStatus: "fulfilled" })).toEqual([]);
     expect(statusTransitionOptions({})).toEqual([]);
+  });
+});
+
+describe("Commerce order reference formatting", () => {
+  it("prefers the short sequential number", () => {
+    expect(formatOrderRef({ orderNumber: 1001, id: "whatever" })).toBe("#1001");
+  });
+
+  it("shortens long internal ids to a readable reference", () => {
+    expect(formatOrderRef({ id: "8738a4d1-bc00-45b1-b6f6-6520f9886816" })).toBe("#8738A4D1");
+    expect(formatOrderRef({ orderId: "short-one" })).toBe("#short-one");
   });
 });

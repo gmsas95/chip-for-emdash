@@ -34,6 +34,12 @@ export function commandLabel(command: string): string {
   return COMMAND_LABELS[command] ?? command;
 }
 
+export function formatOrderRef(order: { orderNumber?: number; id?: string; orderId?: string }): string {
+  if (typeof order.orderNumber === "number") return `#${order.orderNumber}`;
+  const raw = order.orderId ?? order.id ?? "";
+  return raw.length > 12 ? `#${raw.slice(0, 8).toUpperCase()}` : `#${raw}`;
+}
+
 export interface StatusTransitionOption {
   command: string;
   label: string;
@@ -166,7 +172,7 @@ export function OrderDetail({ orderId, apiBasePath }: AdminPageProps & { orderId
         {order ? (
           <>
             <header>
-              <h3>Order {order.orderId ?? order.id}</h3>
+              <h3>Order {formatOrderRef(order)}</h3>
               <p>
                 <strong>{statusLabel(order.status)}</strong>
                 {order.createdAt === undefined ? null : <> · {formatDate(order.createdAt)}</>}
