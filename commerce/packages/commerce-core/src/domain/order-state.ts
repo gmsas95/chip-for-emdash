@@ -35,6 +35,28 @@ function invalidTransition(): never {
   throw new Error("Invalid order transition");
 }
 
+const ADMIN_COMMAND_TYPES = [
+  "payment_failed",
+  "fulfillment_processing",
+  "fulfillment_partially_fulfilled",
+  "fulfillment_completed",
+  "complete",
+  "cancel",
+] as const satisfies ReadonlyArray<OrderCommand["type"]>;
+
+export function allowedCommandsFor(order: OrderState): OrderCommand[] {
+  return ADMIN_COMMAND_TYPES.filter((type) => {
+    try {
+      const next = transitionOrder(order, { type });
+      return next.status !== order.status
+        || next.paymentStatus !== order.paymentStatus
+        || next.fulfillmentStatus !== order.fulfillmentStatus;
+    } catch {
+      return false;
+    }
+  }).map((type) => ({ type }) as OrderCommand);
+}
+
 export function transitionOrder(order: OrderState, command: OrderCommand): OrderState {
   switch (command.type) {
     case "payment_pending":

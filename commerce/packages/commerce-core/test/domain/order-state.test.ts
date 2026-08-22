@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { transitionOrder } from "../../src/domain/order-state.js";
+import { allowedCommandsFor, transitionOrder } from "../../src/domain/order-state.js";
+import type { OrderState, OrderStatus } from "../../src/domain/order-state.js";
 
 describe("transitionOrder", () => {
   it("does not allow a paid order to return to pending payment", () => {
@@ -51,5 +52,34 @@ describe("transitionOrder", () => {
     expect(() => transitionOrder({ status: "cancelled" }, { type: "complete" })).toThrow("Invalid order transition");
     expect(() => transitionOrder({ status: "refunded" }, { type: "payment_paid" })).toThrow("Invalid order transition");
     expect(() => transitionOrder({ status: "paid" }, { type: "unknown" } as never)).toThrow("Invalid order transition");
+  });
+});
+
+describe("allowedCommandsFor", () => {
+  it("exposes only state-changing admin transitions per status", () => {
+    const cases: Array<[OrderState, string[]]> = [
+      [{ status: "draft" }, ["cancel"]],
+      [{ status: "pending_payment", paymentStatus: "pending" }, ["payment_failed", "cancel"]],
+      [{ status: "paid", paymentStatus: "paid" }, ["fulfillment_processing", "cancel"]],
+      [{ status: "processing", paymentStatus: "paid", fulfillmentStatus: "processing" }, ["fulfillment_partially_fulfilled", "fulfillment_completed"]],
+      [{ status: "partially_fulfilled", paymentStatus: "paid", fulfillmentStatus: "partially_fulfilled" }, ["fulfillment_completed"]],
+      [{ status: "fulfilled", paymentStatus: "paid", fulfillmentStatus: "fulfilled" }, ["complete"]],
+      [{ status: "completed", paymentStatus: "paid", fulfillmentStatus: "fulfilled" }, []],
+      [{ status: "cancelled" }, []],
+      [{ status: "failed", paymentStatus: "failed" }, ["cancel"]],
+      [{ status: "refunded", paymentStatus: "refunded" }, []],
+    ];
+    for (const [state, expected] of cases) {
+      expect(allowedCommandsFor(state).map((command) => command.type)).toEqual(expected);
+    }
+  });
+
+  it("never exposes bridge-owned payment commands to admins", () => {
+    for (const status of ["draft", "pending_payment", "paid"] as OrderStatus[]) {
+      const types = allowedCommandsFor({ status }).map((command) => command.type);
+      expect(types).not.toContain("payment_paid");
+      expect(types).not.toContain("payment_pending");
+      expect(types).not.toContain("payment_refunded");
+    }
   });
 });

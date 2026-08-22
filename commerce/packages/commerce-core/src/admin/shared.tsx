@@ -73,7 +73,7 @@ export function useCommerceData<T>(
   return { data, loading, error, reload };
 }
 
-export function useCommerceMutation<TInput, TOutput>(
+export function useCommerceMutation<TInput, TOutput = unknown>(
   path: string,
   apiBasePath = "/_emdash/api/plugins/emdash-commerce",
 ): { submit: (input: TInput) => Promise<TOutput>; loading: boolean; error: string | undefined } {

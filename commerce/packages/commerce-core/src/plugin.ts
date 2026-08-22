@@ -25,6 +25,8 @@ import { COMMERCE_COLLECTION_INDEXES } from "./storage/collections.js";
 import { createEmDashRepositories } from "./storage/repositories.js";
 import type { CommerceRepositories, EmDashCommerceStorage } from "./storage/repositories.js";
 import { InsufficientStockError, confirmOrderReservations, expireDueReservations, releaseOrderReservations, reserveOrderStock } from "./storage/reservations.js";
+import { addOrderNote, listOrderNotes } from "./storage/order-notes.js";
+import type { OrderNoteType } from "./storage/order-notes.js";
 
 const PAYMENT_EVENT_COMMANDS: Record<string, OrderCommand["type"]> = {
   "commerce.payment.paid": "payment_paid",
@@ -411,6 +413,14 @@ async function publicOrderRoute(context: RouteContext): Promise<unknown> {
 async function ordersRoute(context: RouteContext): Promise<unknown> {
   const repositories = repositoriesFromContext(context);
   if (context.request.method === "GET") {
+    const input = isRecord(context.input) ? context.input : {};
+    if (typeof input.orderId === "string") {
+      const order = await repositories.orders.get(input.orderId);
+      if (!order) {
+        throw PluginRouteError.notFound("Order not found");
+      }
+      return order;
+    }
     return repositories.orders.query({ limit: 50 });
   }
   requireMethod(context, "POST");
@@ -424,6 +434,76 @@ async function ordersRoute(context: RouteContext): Promise<unknown> {
     throw PluginRouteError.notFound("Order not found");
   }
   return order;
+}
+
+async function orderStatusRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "POST");
+  const body = requestBody(context);
+  if (typeof body.orderId !== "string") {
+    throw PluginRouteError.badRequest("orderId is required");
+  }
+  if (typeof body.command !== "string") {
+    throw PluginRouteError.badRequest("command is required");
+  }
+  const repositories = repositoriesFromContext(context);
+  const order = await repositories.orders.get(body.orderId) as OrderSnapshot | undefined;
+  if (!order) {
+    throw PluginRouteError.notFound("Order not found");
+  }
+  if (["payment_pending", "payment_paid", "payment_refunded"].includes(body.command)) {
+    throw PluginRouteError.conflict(`Command ${body.command} is not allowed from the admin`);
+  }
+  const currentStatus = typeof order.status === "string" ? order.status : "pending_payment";
+  let next: ReturnType<typeof transitionOrder>;
+  try {
+    next = transitionOrder({ ...order, status: currentStatus }, { type: body.command } as OrderCommand);
+  } catch {
+    throw PluginRouteError.conflict(`Transition ${body.command} is not allowed for an order in status ${currentStatus}`);
+  }
+  await repositories.orders.put(order.id, { ...order, ...next, updatedAt: new Date().toISOString() } as never);
+  if (body.command === "cancel" || body.command === "payment_failed") {
+    try {
+      await releaseOrderReservations(repositories, order.id);
+    } catch {
+      context.log?.warn?.("Failed to release reservations during status change", { orderId: order.id });
+    }
+  }
+  await addOrderNote(repositories, {
+    orderId: order.id,
+    note: `Order status changed to ${String(next.status)}.`,
+    type: "private",
+    system: true,
+  });
+  return next;
+}
+
+async function orderNotesRoute(context: RouteContext): Promise<unknown> {
+  const repositories = repositoriesFromContext(context);
+  if (context.request.method === "GET") {
+    const input = isRecord(context.input) ? context.input : {};
+    if (typeof input.orderId !== "string") {
+      throw PluginRouteError.badRequest("orderId is required");
+    }
+    return { items: await listOrderNotes(repositories, input.orderId) };
+  }
+  requireMethod(context, "POST");
+  const body = requestBody(context);
+  if (typeof body.orderId !== "string") {
+    throw PluginRouteError.badRequest("orderId is required");
+  }
+  const order = await repositories.orders.get(body.orderId);
+  if (!order) {
+    throw PluginRouteError.notFound("Order not found");
+  }
+  const note = typeof body.note === "string" ? body.note.trim() : "";
+  if (note === "" || note.length > 2000) {
+    throw PluginRouteError.badRequest("note must be a non-empty string of at most 2000 characters");
+  }
+  const type = body.type === undefined ? "private" : body.type;
+  if (type !== "private" && type !== "customer") {
+    throw PluginRouteError.badRequest("type must be private or customer");
+  }
+  return addOrderNote(repositories, { orderId: body.orderId, note, type: type as OrderNoteType });
 }
 
 async function refundOrderRoute(options: CommercePluginOptions, context: RouteContext): Promise<unknown> {
@@ -599,6 +679,8 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       order: { public: true, handler: publicOrderRoute },
       orders: { public: false, handler: ordersRoute },
       "orders/refund": { public: false, handler: (context) => refundOrderRoute(options, context) },
+      "orders/status": { public: false, handler: orderStatusRoute },
+      "orders/notes": { public: false, handler: orderNotesRoute },
       "mcp/search": { public: false, permission: "plugins:manage", handler: commerceMcpSearchRoute },
       "mcp/execute": { public: false, permission: "plugins:manage", handler: commerceMcpExecuteRoute },
       "bridge/events": { public: true, handler: (context) => bridgeEventsRoute(options, replayStore, context) },

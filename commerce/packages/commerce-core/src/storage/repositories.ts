@@ -58,6 +58,7 @@ export interface CommerceRepositories {
   carts: DocumentRepository;
   orders: DocumentRepository<OrderSnapshot>;
   orderEvents: DocumentRepository;
+  orderNotes: DocumentRepository;
   customers: DocumentRepository;
   addresses: DocumentRepository;
   promotions: DocumentRepository;
@@ -426,6 +427,7 @@ export function createMemoryRepositories(): CommerceRepositories {
     carts: createMemoryRepository(COMMERCE_COLLECTION_INDEXES.carts),
     orders: createMemoryRepository<OrderSnapshot>(COMMERCE_COLLECTION_INDEXES.orders),
     orderEvents: createMemoryRepository(COMMERCE_COLLECTION_INDEXES.orderEvents),
+    orderNotes: createMemoryRepository(COMMERCE_COLLECTION_INDEXES.orderNotes),
     customers: createMemoryRepository(COMMERCE_COLLECTION_INDEXES.customers),
     addresses: createMemoryRepository(COMMERCE_COLLECTION_INDEXES.addresses),
     promotions: createMemoryRepository(COMMERCE_COLLECTION_INDEXES.promotions),
@@ -447,6 +449,7 @@ export function createEmDashRepositories(storage: EmDashCommerceStorage): Commer
     carts: adaptEmDashCollection(storage.carts, COMMERCE_COLLECTION_INDEXES.carts),
     orders: adaptEmDashCollection(storage.orders, COMMERCE_COLLECTION_INDEXES.orders),
     orderEvents: adaptEmDashCollection(storage.orderEvents, COMMERCE_COLLECTION_INDEXES.orderEvents),
+    orderNotes: adaptEmDashCollection(storage.orderNotes, COMMERCE_COLLECTION_INDEXES.orderNotes),
     customers: adaptEmDashCollection(storage.customers, COMMERCE_COLLECTION_INDEXES.customers),
     addresses: adaptEmDashCollection(storage.addresses, COMMERCE_COLLECTION_INDEXES.addresses),
     promotions: adaptEmDashCollection(storage.promotions, COMMERCE_COLLECTION_INDEXES.promotions),
