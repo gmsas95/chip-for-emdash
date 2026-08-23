@@ -189,6 +189,77 @@ async function providerStatusRoute(options: CommercePluginOptions, context: Rout
   };
 }
 
+const DASHBOARD_WINDOW_DAYS = 14;
+
+async function statsRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "GET");
+  const repositories = repositoriesFromContext(context);
+
+  const totals = { revenueMinor: 0, paidOrders: 0, aovMinor: 0, itemsSold: 0 };
+  const daily = new Map<string, { revenueMinor: number; orders: number }>();
+  const recent: Array<Record<string, unknown>> = [];
+  let currency = "MYR";
+  let cursor: string | undefined;
+  do {
+    const page = await repositories.orders.query({ limit: 100, ...(cursor === undefined ? {} : { cursor }) });
+    for (const { data } of page.items) {
+      if (!isRecord(data)) continue;
+      recent.push(data);
+      if (typeof data.status !== "string" || !PAID_ORDER_STATUSES.has(data.status)) continue;
+      const totalMinor = typeof data.totalMinor === "number" ? data.totalMinor : 0;
+      const createdAt = typeof data.createdAt === "string" ? data.createdAt : "";
+      totals.revenueMinor += totalMinor;
+      totals.paidOrders += 1;
+      if (typeof data.currency === "string" && currency === "MYR") currency = data.currency;
+      const date = createdAt.slice(0, 10);
+      if (date !== "") {
+        const bucket = daily.get(date) ?? { revenueMinor: 0, orders: 0 };
+        bucket.revenueMinor += totalMinor;
+        bucket.orders += 1;
+        daily.set(date, bucket);
+      }
+      if (Array.isArray(data.lines)) {
+        for (const line of data.lines) {
+          if (isRecord(line) && typeof line.quantity === "number") totals.itemsSold += line.quantity;
+        }
+      }
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor !== undefined);
+  totals.aovMinor = totals.paidOrders > 0 ? Math.round(totals.revenueMinor / totals.paidOrders) : 0;
+
+  const windowStart = new Date();
+  windowStart.setUTCDate(windowStart.getUTCDate() - (DASHBOARD_WINDOW_DAYS - 1));
+  const series: Array<{ date: string; revenueMinor: number; orders: number }> = [];
+  for (let offset = DASHBOARD_WINDOW_DAYS - 1; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - offset);
+    const key = date.toISOString().slice(0, 10);
+    series.push({ date: key, ...(daily.get(key) ?? { revenueMinor: 0, orders: 0 }) });
+  }
+
+  recent.sort((left, right) => String(right.createdAt ?? "").localeCompare(String(left.createdAt ?? "")));
+  const recentOrders = recent.slice(0, 5)
+    .map(({ orderAccessToken: _orderAccessToken, ...safe }) => ({
+      id: safe.id,
+      orderId: safe.orderId,
+      orderNumber: safe.orderNumber,
+      status: safe.status,
+      currency: safe.currency,
+      totalMinor: safe.totalMinor,
+      createdAt: safe.createdAt,
+    }));
+
+  const thresholdRaw = await context.kv?.get<number>("settings:lowStockThreshold");
+  const threshold = typeof thresholdRaw === "number" && Number.isSafeInteger(thresholdRaw) && thresholdRaw > 0 ? thresholdRaw : 5;
+  const inventoryPage = await repositories.inventory.query({ limit: 100 });
+  const lowStock = inventoryPage.items
+    .filter(({ data }) => isRecord(data) && data.status === "active" && typeof data.available === "number" && data.available <= threshold)
+    .map(({ data }) => ({ sku: (data as Record<string, unknown>).sku, available: (data as Record<string, unknown>).available }));
+
+  return { currency, totals, daily: series, recentOrders, lowStock };
+}
+
 async function inventoryRoute(context: RouteContext): Promise<unknown> {
   requireMethod(context, "GET");
   const repositories = repositoriesFromContext(context);
@@ -844,6 +915,7 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       "inventory/update": { public: false, handler: inventoryUpdateRoute },
       "inventory/holds": { public: false, handler: inventoryHoldsRoute },
       "provider-status": { public: false, handler: (context) => providerStatusRoute(options, context) },
+      stats: { public: false, handler: statsRoute },
       customers: { public: false, handler: customersRoute },
       "customers/detail": { public: false, handler: customersDetailRoute },
       cart: { public: true, handler: cartRoute },
