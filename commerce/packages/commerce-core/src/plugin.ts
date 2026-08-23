@@ -39,6 +39,23 @@ const PLUGIN_ID = "emdash-commerce";
 const PLUGIN_VERSION = "0.2.0";
 const checkoutLocks = new Map<string, Promise<void>>();
 
+export interface CommerceEmailMessage {
+  to: string;
+  subject: string;
+  text: string;
+}
+
+export async function sendCommerceEmail(context: unknown, message: CommerceEmailMessage): Promise<boolean> {
+  const email = (context as { email?: { send?: (message: CommerceEmailMessage) => Promise<void> } }).email;
+  if (!email || typeof email !== "object" || typeof email.send !== "function") return false;
+  try {
+    await email.send(message);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface CommercePaymentProvider {
   createPayment(input: { order: OrderSnapshot; idempotencyKey: string }): Promise<{ checkoutUrl: string; paymentReference?: string }>;
 }
@@ -587,6 +604,16 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     cart.status = "checked_out";
     cart.checkoutResult = storedResult;
     await repositories.carts.put(cartId, cart as never);
+    const confirmationEmail = preparedCustomer?.snapshot.email
+      ? {
+          to: preparedCustomer.snapshot.email,
+          subject: `Your order ${order.orderId} is confirmed`,
+          text: `Thanks for your order!\n\nOrder: ${order.orderId}\nTotal: ${(order.totalMinor / 100).toFixed(2)} ${order.currency}\n\nComplete your payment here: ${payment.checkoutUrl}\n`,
+        }
+      : undefined;
+    if (confirmationEmail) {
+      await sendCommerceEmail(context, confirmationEmail);
+    }
     return { ...storedResult, orderAccessToken: order.orderAccessToken };
   } catch (error) {
     try {
@@ -716,6 +743,59 @@ async function orderNotesRoute(context: RouteContext): Promise<unknown> {
   return addOrderNote(repositories, { orderId: body.orderId, note, type: type as OrderNoteType });
 }
 
+async function settingsGetRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "GET");
+  const [storeName, storeEmail, defaultCurrency, lowStockThreshold] = await Promise.all([
+    context.kv?.get<string>("settings:storeName"),
+    context.kv?.get<string>("settings:storeEmail"),
+    context.kv?.get<string>("settings:defaultCurrency"),
+    context.kv?.get<number>("settings:lowStockThreshold"),
+  ]);
+  return {
+    storeName: typeof storeName === "string" ? storeName : "",
+    storeEmail: typeof storeEmail === "string" ? storeEmail : "",
+    defaultCurrency: typeof defaultCurrency === "string" && /^[A-Z]{3}$/.test(defaultCurrency) ? defaultCurrency : "MYR",
+    lowStockThreshold: typeof lowStockThreshold === "number" && Number.isSafeInteger(lowStockThreshold) && lowStockThreshold >= 1 && lowStockThreshold <= 1000
+      ? lowStockThreshold
+      : 5,
+  };
+}
+
+async function settingsSaveRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "POST");
+  const body = requestBody(context);
+  const kv = context.kv;
+  if (!kv) throw new PluginRouteError("SETTINGS_UNAVAILABLE", "Settings storage is unavailable", 500);
+
+  if (body.storeName !== undefined) {
+    const storeName = typeof body.storeName === "string" ? body.storeName.trim() : "";
+    if (storeName === "" || storeName.length > 120) {
+      throw PluginRouteError.badRequest("store name must be a non-empty string of at most 120 characters");
+    }
+    await kv.set("settings:storeName", storeName);
+  }
+  if (body.storeEmail !== undefined) {
+    const storeEmail = typeof body.storeEmail === "string" ? body.storeEmail.trim() : "";
+    if (storeEmail !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(storeEmail)) {
+      throw PluginRouteError.badRequest("store email must be a valid email address");
+    }
+    await kv.set("settings:storeEmail", storeEmail);
+  }
+  if (body.defaultCurrency !== undefined) {
+    if (typeof body.defaultCurrency !== "string" || !/^[A-Z]{3}$/.test(body.defaultCurrency)) {
+      throw PluginRouteError.badRequest("default currency must be a three-letter uppercase ISO code");
+    }
+    await kv.set("settings:defaultCurrency", body.defaultCurrency);
+  }
+  if (body.lowStockThreshold !== undefined) {
+    if (typeof body.lowStockThreshold !== "number" || !Number.isSafeInteger(body.lowStockThreshold) || body.lowStockThreshold < 1 || body.lowStockThreshold > 1000) {
+      throw PluginRouteError.badRequest("low stock threshold must be a whole number between 1 and 1000");
+    }
+    await kv.set("settings:lowStockThreshold", body.lowStockThreshold);
+  }
+  return settingsGetRoute({ ...context, request: new Request(context.request.url, { method: "GET" }) } as RouteContext);
+}
+
 async function refundOrderRoute(options: CommercePluginOptions, context: RouteContext): Promise<unknown> {
   requireMethod(context, "POST");
   const body = requestBody(context);
@@ -771,6 +851,14 @@ async function refundOrderRoute(options: CommercePluginOptions, context: RouteCo
   }
   await repositories.orders.put(order.id, { ...refundedOrder, updatedAt: new Date().toISOString() } as never);
   await releaseOrderReservations(repositories, order.id);
+  const customerEmail = order.customer?.email;
+  if (customerEmail) {
+    await sendCommerceEmail(context, {
+      to: customerEmail,
+      subject: `Your refund for order ${publicOrderId} is complete`,
+      text: `Your refund for order ${publicOrderId} has been processed.\n\nThe amount will be returned via your original payment method.`,
+    });
+  }
   return { orderId: publicOrderId, refundStatus: "refunded", message };
 }
 
@@ -836,6 +924,14 @@ async function bridgeEventsRoute(
           await confirmOrderReservations(repositories, commerceOrderId);
         } else {
           await releaseOrderReservations(repositories, commerceOrderId);
+        }
+        const customerEmail = order.customer?.email;
+        if (commandType === "payment_failed" && customerEmail) {
+          await sendCommerceEmail(context, {
+            to: customerEmail,
+            subject: `Payment for order ${commerceOrderId} failed`,
+            text: `Unfortunately, the payment for your order ${commerceOrderId} did not go through.\n\nIf you still want these items, please place the order again.`,
+          });
         }
       }
     }
@@ -916,6 +1012,8 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       "inventory/holds": { public: false, handler: inventoryHoldsRoute },
       "provider-status": { public: false, handler: (context) => providerStatusRoute(options, context) },
       stats: { public: false, handler: statsRoute },
+      "settings/get": { public: false, handler: settingsGetRoute },
+      "settings/save": { public: false, handler: settingsSaveRoute },
       customers: { public: false, handler: customersRoute },
       "customers/detail": { public: false, handler: customersDetailRoute },
       cart: { public: true, handler: cartRoute },
@@ -958,11 +1056,11 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
         await expireDueReservations(repositories);
       },
     },
+    capabilities: options.enabled === false ? [] : ["email:send"],
     admin: {
       entry: "@emdash-commerce/core/admin",
       pages: [...ADMIN_PAGES],
       widgets: [{ id: "commerce-summary", title: "Commerce", size: "third" }],
     },
-    ...(options.enabled === false ? { capabilities: [] } : {}),
   });
 }
