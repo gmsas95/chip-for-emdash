@@ -191,7 +191,75 @@ async function providerStatusRoute(options: CommercePluginOptions, context: Rout
 
 async function inventoryRoute(context: RouteContext): Promise<unknown> {
   requireMethod(context, "GET");
-  return context.storage.inventory?.query({ limit: 50 });
+  const repositories = repositoriesFromContext(context);
+  const [page, threshold] = await Promise.all([
+    repositories.inventory.query({ limit: 100 }),
+    context.kv?.get<number>("settings:lowStockThreshold"),
+  ]);
+  return {
+    items: page.items,
+    lowStockThreshold: typeof threshold === "number" && Number.isSafeInteger(threshold) && threshold > 0 ? threshold : 5,
+  };
+}
+
+async function inventoryUpdateRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "POST");
+  const body = requestBody(context);
+  if (typeof body.inventoryId !== "string") {
+    throw PluginRouteError.badRequest("inventoryId is required");
+  }
+  const repositories = repositoriesFromContext(context);
+  const existing = await repositories.inventory.get(body.inventoryId);
+  if (!isRecord(existing)) {
+    throw PluginRouteError.notFound("Inventory record not found");
+  }
+  let available: unknown = isRecord(existing) ? existing.available : 0;
+  if (body.available !== undefined) {
+    try {
+      available = integerAmountInput(body.available, "available");
+    } catch (error) {
+      throw PluginRouteError.badRequest(error instanceof Error ? error.message : "Invalid stock");
+    }
+  }
+  const status = body.status === undefined
+    ? (typeof existing.status === "string" ? existing.status : "active")
+    : body.status;
+  if (status !== "active" && status !== "disabled") {
+    throw PluginRouteError.badRequest("status must be active or disabled");
+  }
+  const reserved = typeof existing.reserved === "number" ? existing.reserved : 0;
+  if (typeof available === "number" && reserved > available) {
+    throw PluginRouteError.conflict(`Available stock cannot drop below the ${reserved} currently reserved`);
+  }
+  const updated = {
+    ...existing,
+    ...(body.available === undefined ? {} : { available }),
+    status,
+    updatedAt: new Date().toISOString(),
+  };
+  await repositories.inventory.put(body.inventoryId, updated as never);
+  return updated;
+}
+
+function integerAmountInput(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative whole number`);
+  }
+  return value;
+}
+
+async function inventoryHoldsRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "GET");
+  const repositories = repositoriesFromContext(context);
+  const [active, confirmed] = await Promise.all([
+    repositories.reservations.query({ where: { status: "active" }, limit: 100 }),
+    repositories.reservations.query({ where: { status: "confirmed" }, limit: 100 }),
+  ]);
+  const items = [...active.items, ...confirmed.items]
+    .map(({ data }) => data)
+    .filter(isRecord)
+    .sort((left, right) => String(right.createdAt ?? "").localeCompare(String(left.createdAt ?? "")));
+  return { items };
 }
 
 const PAID_ORDER_STATUSES = new Set(["paid", "processing", "partially_fulfilled", "fulfilled", "completed"]);
@@ -773,6 +841,8 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       "products/save": { public: false, handler: productSaveRoute },
       "products/archive": { public: false, handler: productArchiveRoute },
       inventory: { public: false, handler: inventoryRoute },
+      "inventory/update": { public: false, handler: inventoryUpdateRoute },
+      "inventory/holds": { public: false, handler: inventoryHoldsRoute },
       "provider-status": { public: false, handler: (context) => providerStatusRoute(options, context) },
       customers: { public: false, handler: customersRoute },
       "customers/detail": { public: false, handler: customersDetailRoute },
