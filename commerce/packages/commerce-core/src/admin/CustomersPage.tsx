@@ -5,16 +5,14 @@ import { AdminPageShell, DataState, formatMinorAmount, useCommerceData, type Adm
 
 interface CustomerRow {
   id: string;
-  data: {
-    customerId?: string;
-    name?: string;
-    email?: string;
-    phone?: string;
-    orderCount?: number;
-    status?: string;
-    totalSpentMinor?: number;
-    lastOrderAt?: string;
-  };
+  customerId?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  orderCount?: number;
+  status?: string;
+  totalSpentMinor?: number;
+  lastOrderAt?: string;
 }
 
 function formatDate(value?: string): string {
@@ -34,13 +32,13 @@ export function CustomersPage({ apiBasePath }: AdminPageProps): AdminPageElement
           <thead><tr><th scope="col">Customer</th><th scope="col">Email</th><th scope="col">Orders</th><th scope="col">Total spent</th><th scope="col">Last order</th></tr></thead>
           <tbody>
             {result.data?.items.length === 0 ? <tr><td colSpan={5}>No customers yet. Customers appear after checkout.</td></tr> : null}
-            {(result.data?.items ?? []).map(({ id, data }) => (
-              <tr key={id} style={{ cursor: "pointer" }} onClick={() => setSelectedCustomerId(id)}>
-                <th scope="row">{data.name ?? data.email ?? id}</th>
-                <td>{data.email ?? "—"}</td>
-                <td>{data.orderCount ?? 0}</td>
-                <td>{formatMinorAmount(data.totalSpentMinor ?? 0, "MYR")}</td>
-                <td>{formatDate(data.lastOrderAt)}</td>
+            {(result.data?.items ?? []).map((row) => (
+              <tr key={row.id} style={{ cursor: "pointer" }} onClick={() => setSelectedCustomerId(row.id)}>
+                <th scope="row">{row.name ?? row.email ?? row.id}</th>
+                <td>{row.email ?? "—"}</td>
+                <td>{row.orderCount ?? 0}</td>
+                <td>{formatMinorAmount(row.totalSpentMinor ?? 0, "MYR")}</td>
+                <td>{formatDate(row.lastOrderAt)}</td>
               </tr>
             ))}
           </tbody>
