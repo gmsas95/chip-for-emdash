@@ -67,7 +67,7 @@ export function SettingsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
             </label>
             {save.error ? <p role="alert">{save.error}</p> : null}
             <div className="commerce-admin-toolbar" style={{ justifyContent: "flex-start", alignItems: "center" }}>
-              <button type="submit" disabled={save.loading}>{save.loading ? "Saving…" : "Save settings"}</button>
+              <button type="submit" className="commerce-btn" disabled={save.loading}>{save.loading ? "Saving…" : "Save settings"}</button>
               {!save.loading && !save.error && savedAt ? <span role="status">Saved at {savedAt}</span> : null}
             </div>
           </form>

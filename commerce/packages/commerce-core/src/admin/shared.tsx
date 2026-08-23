@@ -203,15 +203,39 @@ const COMMERCE_ADMIN_CSS = `
   color: var(--commerce-muted);
   cursor: not-allowed;
 }
-.commerce-admin button {
-  color: var(--text-color-kumo-inverse);
-  cursor: pointer;
-  font: inherit;
+.commerce-admin button { cursor: pointer; font: inherit; }
+.commerce-admin .commerce-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid var(--commerce-accent);
+  border-radius: 9px;
+  background: var(--commerce-accent);
+  color: var(--text-color-kumo-inverse, #fff);
   font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  transition: background .12s ease, border-color .12s ease, opacity .12s ease;
 }
-.commerce-admin button:hover { background: var(--commerce-accent-hover); border-color: var(--commerce-accent-hover); }
-.commerce-admin button:disabled { cursor: wait; opacity: .55; }
-.commerce-admin button + button { margin-left: 8px; }
+.commerce-admin .commerce-btn:hover { background: var(--commerce-accent-hover); border-color: var(--commerce-accent-hover); }
+.commerce-admin .commerce-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--commerce-focus) 35%, transparent); outline-offset: 1px; }
+.commerce-admin .commerce-btn:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+  background: var(--commerce-surface-soft);
+  border-color: var(--commerce-line);
+  color: var(--commerce-muted);
+}
+.commerce-admin .commerce-btn-secondary {
+  background: var(--commerce-surface);
+  border-color: var(--commerce-line);
+  color: var(--commerce-ink);
+}
+.commerce-admin .commerce-btn-secondary:hover { background: var(--commerce-surface-soft); border-color: var(--commerce-muted); }
+.commerce-admin .commerce-btn-sm { min-height: 30px; padding: 4px 10px; font-size: 13px; }
 .commerce-admin a { color: var(--text-color-kumo-link, var(--commerce-accent)); font-weight: 700; }
 .commerce-admin fieldset { display: grid; gap: 12px; margin: 14px 0; border: 1px solid var(--commerce-line); border-radius: 10px; padding: 16px; }
 .commerce-admin legend { padding: 0 6px; font-weight: 750; }

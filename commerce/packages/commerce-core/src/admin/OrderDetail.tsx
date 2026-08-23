@@ -210,7 +210,7 @@ export function OrderDetail({ orderId, apiBasePath, onChanged }: AdminPageProps 
                   {transitions.map(({ command, label }) => <option key={command} value={command}>{label}</option>)}
                 </select>
                 {order.status === "paid" || order.status === "processing" ? (
-                  <button type="button" onClick={() => void refund()} disabled={busy}>{busy ? "Working…" : "Refund…"}</button>
+                  <button type="button" className="commerce-btn" onClick={() => void refund()} disabled={busy}>{busy ? "Working…" : "Refund…"}</button>
                 ) : null}
               </div>
               {(statusMutation.error ?? refundMutation.error) ? (
@@ -267,7 +267,7 @@ export function OrderDetail({ orderId, apiBasePath, onChanged }: AdminPageProps 
               <option value="customer">Customer-facing</option>
             </select>
           </label>
-          <button type="submit" disabled={noteMutation.loading}>{noteMutation.loading ? "Adding…" : "Add note"}</button>
+          <button type="submit" className="commerce-btn" disabled={noteMutation.loading}>{noteMutation.loading ? "Adding…" : "Add note"}</button>
         </form>
         {noteMutation.error ? <p role="alert">{noteMutation.error}</p> : null}
         {notesResult.data?.items.length ? (

@@ -63,7 +63,7 @@ function imageRow(image: ProductImage, index: number, onChange: (image: ProductI
       <label>Media ID <input value={image.mediaId} onChange={(event) => onChange({ ...image, mediaId: event.target.value })} /></label>
       <label>URL <input type="url" value={image.url} onChange={(event) => onChange({ ...image, url: event.target.value })} /></label>
       <label>Alt text <input value={image.alt} onChange={(event) => onChange({ ...image, alt: event.target.value })} /></label>
-      <button type="button" onClick={onRemove}>Remove image</button>
+      <button type="button" onClick={onRemove} className="commerce-btn-secondary">Remove image</button>
     </fieldset>
   );
 }
@@ -131,7 +131,7 @@ export function ProductsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
   return (
     <AdminPageShell title="Products">
       <div className="commerce-admin-toolbar">
-        <button type="button" onClick={() => { setEditor(createEmptyProductDraft()); setEditorError(undefined); }}>New product</button>
+        <button className="commerce-btn" type="button" onClick={() => { setEditor(createEmptyProductDraft()); setEditorError(undefined); }}>New product</button>
       </div>
       <DataState {...list}>
         <table>
@@ -144,7 +144,7 @@ export function ProductsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
                 <td>{data.sku ?? "—"}</td>
                 <td>{data.priceMinor === undefined ? "Variant pricing" : formatMinorAmount(data.priceMinor, data.currency)}</td>
                 <td>{data.status}</td>
-                <td><button type="button" onClick={() => void openEdit(id)}>Edit</button> <button type="button" onClick={() => void archiveProduct(id)}>Archive</button></td>
+                <td><button className="commerce-btn-secondary" type="button" onClick={() => void openEdit(id)}>Edit</button> <button type="button" onClick={() => void archiveProduct(id)}>Archive</button></td>
               </tr>
             ))}
           </tbody>
@@ -180,7 +180,7 @@ export function ProductsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
               }} />
             </label>
             {uploadingImage ? <p role="status">Uploading image to R2...</p> : null}
-            <button type="button" onClick={() => setEditor({ ...editor, images: [...editor.images, { mediaId: "", url: "", alt: "" }] })}>Add image reference</button>
+            <button className="commerce-btn" type="button" onClick={() => setEditor({ ...editor, images: [...editor.images, { mediaId: "", url: "", alt: "" }] })}>Add image reference</button>
           </section>
           {editor.hasVariants ? (
             <section>
@@ -193,10 +193,10 @@ export function ProductsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
                   <label>Status <select value={variant.status} onChange={(event) => setEditor({ ...editor, variants: editor.variants.map((item, itemIndex) => itemIndex === index ? { ...item, status: event.target.value as VariantEditorDraft["status"] } : item) })}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
                   <label>Price <input required inputMode="decimal" value={variant.priceMinor} onChange={(event) => setEditor({ ...editor, variants: editor.variants.map((item, itemIndex) => itemIndex === index ? { ...item, priceMinor: event.target.value } : item) })} /></label>
                   <label>Options <textarea placeholder={"size=Large\ncolor=Red"} value={variant.optionsText} onChange={(event) => setEditor({ ...editor, variants: editor.variants.map((item, itemIndex) => itemIndex === index ? { ...item, optionsText: event.target.value } : item) })} /></label>
-                  <button type="button" onClick={() => setEditor({ ...editor, variants: editor.variants.filter((_, itemIndex) => itemIndex !== index), inventory: editor.inventory.filter((item) => item.variantId !== variant.id) })}>Remove variant</button>
+                  <button className="commerce-btn-secondary" type="button" onClick={() => setEditor({ ...editor, variants: editor.variants.filter((_, itemIndex) => itemIndex !== index), inventory: editor.inventory.filter((item) => item.variantId !== variant.id) })}>Remove variant</button>
                 </fieldset>
               ))}
-              <button type="button" onClick={() => setEditor({ ...editor, variants: [...editor.variants, emptyVariant()] })}>Add variant</button>
+              <button className="commerce-btn" type="button" onClick={() => setEditor({ ...editor, variants: [...editor.variants, emptyVariant()] })}>Add variant</button>
               <h3>Inventory</h3>
               {editor.inventory.map((item, index) => (
                 <fieldset key={item.id ?? index}>
@@ -205,14 +205,14 @@ export function ProductsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
                   <label>SKU <input required value={item.sku} onChange={(event) => setEditor({ ...editor, inventory: editor.inventory.map((row, rowIndex) => rowIndex === index ? { ...row, sku: event.target.value } : row) })} /></label>
                   <label>Available <input required inputMode="numeric" value={item.available} onChange={(event) => setEditor({ ...editor, inventory: editor.inventory.map((row, rowIndex) => rowIndex === index ? { ...row, available: event.target.value } : row) })} /></label>
                   <label>Reserved <input required inputMode="numeric" value={item.reserved} onChange={(event) => setEditor({ ...editor, inventory: editor.inventory.map((row, rowIndex) => rowIndex === index ? { ...row, reserved: event.target.value } : row) })} /></label>
-                  <button type="button" onClick={() => setEditor({ ...editor, inventory: editor.inventory.filter((_, rowIndex) => rowIndex !== index) })}>Remove inventory row</button>
+                  <button className="commerce-btn-secondary" type="button" onClick={() => setEditor({ ...editor, inventory: editor.inventory.filter((_, rowIndex) => rowIndex !== index) })}>Remove inventory row</button>
                 </fieldset>
               ))}
-              <button type="button" onClick={() => setEditor({ ...editor, inventory: [...editor.inventory, emptyInventory()] })}>Add inventory row</button>
+              <button className="commerce-btn" type="button" onClick={() => setEditor({ ...editor, inventory: [...editor.inventory, emptyInventory()] })}>Add inventory row</button>
             </section>
           ) : null}
-          <button type="submit" disabled={save.loading}>{save.loading ? "Saving..." : "Save product"}</button>
-          <button type="button" onClick={() => setEditor(undefined)}>Cancel</button>
+          <button type="submit" className="commerce-btn" disabled={save.loading}>{save.loading ? "Saving..." : "Save product"}</button>
+          <button className="commerce-btn-secondary" type="button" onClick={() => setEditor(undefined)}>Cancel</button>
         </form>
       ) : null}
     </AdminPageShell>

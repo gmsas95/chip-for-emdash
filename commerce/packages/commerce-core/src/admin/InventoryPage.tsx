@@ -45,7 +45,7 @@ function StockEditor({ row, apiBasePath, onSaved }: { row: InventoryRow; apiBase
         onChange={(event) => setValue(event.target.value)}
       />
       {dirty || mutation.loading ? (
-        <button type="button" onClick={() => void save()} disabled={mutation.loading} style={{ minHeight: 34 }}>
+        <button type="button" className="commerce-btn commerce-btn-sm" onClick={() => void save()} disabled={mutation.loading}>
           {mutation.loading ? "…" : "Save"}
         </button>
       ) : null}

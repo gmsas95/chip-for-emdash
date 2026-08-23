@@ -62,7 +62,7 @@ export function Drawer({ title, ariaLabel, onClose, children }: DrawerProps): Ad
       <aside className="commerce-drawer" role="dialog" aria-modal="true" aria-label={ariaLabel ?? title}>
         <header className="commerce-drawer-header">
           <h2>{title}</h2>
-          <button ref={closeButtonRef} type="button" className="commerce-drawer-close" aria-label="Close" onClick={onClose}>✕</button>
+          <button ref={closeButtonRef} type="button" className="commerce-drawer-close commerce-btn-secondary commerce-btn-sm" aria-label="Close" onClick={onClose}>✕</button>
         </header>
         <div className="commerce-drawer-body">{children}</div>
       </aside>
