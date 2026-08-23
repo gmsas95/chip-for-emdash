@@ -144,7 +144,7 @@ export function ProductsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
                 <td>{data.sku ?? "—"}</td>
                 <td>{data.priceMinor === undefined ? "Variant pricing" : formatMinorAmount(data.priceMinor, data.currency)}</td>
                 <td>{data.status}</td>
-                <td><button className="commerce-btn-secondary" type="button" onClick={() => void openEdit(id)}>Edit</button> <button type="button" onClick={() => void archiveProduct(id)}>Archive</button></td>
+                <td className="commerce-row-actions"><button className="commerce-btn-secondary commerce-btn-sm" type="button" onClick={() => void openEdit(id)}>Edit</button> <button className="commerce-btn-secondary commerce-btn-sm" type="button" onClick={() => void archiveProduct(id)}>Archive</button></td>
               </tr>
             ))}
           </tbody>
