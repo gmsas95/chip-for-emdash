@@ -194,9 +194,67 @@ async function inventoryRoute(context: RouteContext): Promise<unknown> {
   return context.storage.inventory?.query({ limit: 50 });
 }
 
+const PAID_ORDER_STATUSES = new Set(["paid", "processing", "partially_fulfilled", "fulfilled", "completed"]);
+
+async function customerSpendIndex(repositories: CommerceRepositories): Promise<Map<string, { totalSpentMinor: number; lastOrderAt?: string }>> {
+  const index = new Map<string, { totalSpentMinor: number; lastOrderAt?: string }>();
+  let cursor: string | undefined;
+  do {
+    const page = await repositories.orders.query({ limit: 100, ...(cursor === undefined ? {} : { cursor }) });
+    for (const { data } of page.items) {
+      if (!isRecord(data)) continue;
+      const customerId = typeof data.customerId === "string" ? data.customerId : undefined;
+      if (!customerId) continue;
+      if (typeof data.status !== "string" || !PAID_ORDER_STATUSES.has(data.status)) continue;
+      const totalMinor = typeof data.totalMinor === "number" ? data.totalMinor : 0;
+      const createdAt = typeof data.createdAt === "string" ? data.createdAt : undefined;
+      const previous = index.get(customerId) ?? { totalSpentMinor: 0 };
+      index.set(customerId, {
+        totalSpentMinor: previous.totalSpentMinor + totalMinor,
+        lastOrderAt: createdAt !== undefined && (previous.lastOrderAt === undefined || createdAt > previous.lastOrderAt) ? createdAt : previous.lastOrderAt,
+      });
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor !== undefined);
+  return index;
+}
+
 async function customersRoute(context: RouteContext): Promise<unknown> {
   requireMethod(context, "GET");
-  return context.storage.customers?.query({ limit: 50 });
+  const repositories = repositoriesFromContext(context);
+  const [page, spend] = await Promise.all([
+    repositories.customers.query({ limit: 50 }),
+    customerSpendIndex(repositories),
+  ]);
+  return {
+    items: page.items.map(({ id, data }) => ({
+      id,
+      ...(isRecord(data) ? data : {}),
+      ...(spend.get(id) ?? {}),
+    })),
+  };
+}
+
+async function customersDetailRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "GET");
+  const input = isRecord(context.input) ? context.input : {};
+  if (typeof input.customerId !== "string") {
+    throw PluginRouteError.badRequest("customerId is required");
+  }
+  const repositories = repositoriesFromContext(context);
+  const customer = await repositories.customers.get(input.customerId);
+  if (!customer) {
+    throw PluginRouteError.notFound("Customer not found");
+  }
+  const page = await repositories.orders.query({ where: { customerId: input.customerId }, limit: 100 });
+  const orders = page.items
+    .map(({ data }) => (isRecord(data) ? (data as Record<string, unknown>) : ({} as Record<string, unknown>)))
+    .sort((left, right) => String(right.createdAt ?? "").localeCompare(String(left.createdAt ?? "")))
+    .map((order) => {
+      const { orderAccessToken: _orderAccessToken, ...safeOrder } = order;
+      return safeOrder;
+    });
+  return { customer, orders };
 }
 
 function publicCart(cart: Cart): Omit<Cart, "checkoutKey" | "checkoutOrderId" | "checkoutResult"> {
@@ -717,6 +775,7 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       inventory: { public: false, handler: inventoryRoute },
       "provider-status": { public: false, handler: (context) => providerStatusRoute(options, context) },
       customers: { public: false, handler: customersRoute },
+      "customers/detail": { public: false, handler: customersDetailRoute },
       cart: { public: true, handler: cartRoute },
       checkout: { public: true, handler: (context) => checkoutRoute(options, context) },
       order: { public: true, handler: publicOrderRoute },
