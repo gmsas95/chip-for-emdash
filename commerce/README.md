@@ -1,112 +1,97 @@
 # EmDash Commerce Core
 
-Provider-neutral commerce infrastructure for [EmDash](https://emdash.dev), designed for a WooCommerce-style extension model.
+Provider-neutral commerce plugin for [EmDash CMS](https://emdashcms.com) — products,
+inventory with reservation holds, carts, checkout, orders, customers, and a full admin
+surface, designed to mirror the WooCommerce operating model on an Astro-native stack.
 
-Commerce Core owns the canonical commerce domain: catalog, variants, prices, carts, inventory reservations, checkout totals, orders, customers, fulfillment references, and storefront-safe APIs. Payment and logistics integrations are installed separately and connect through versioned, authenticated bridge contracts.
-
-## Architecture
-
-```text
-Astro storefront
-      |
-      v
-Commerce Core  <---- signed bridge ---->  Payment plugin
-      |
-      +---------- signed bridge -------->  Logistics plugin
-```
-
-Commerce never trusts browser-supplied totals. Prices, discounts, tax, shipping, inventory, and order totals are recalculated server-side in integer minor units with an explicit ISO currency.
-
-Provider-specific credentials, response payloads, and diagnostics remain owned by the provider plugin. Commerce stores only normalized references and canonical state.
+Payment collection is delegated to provider plugins over a signed bridge contract.
+The reference implementation is **CHIP for EmDash** (`chip-for-emdash`, this repository's
+root package), which adds FPX / e-wallet / card / DuitNow QR via hosted checkout.
 
 ## Packages
 
-- `@gmsas95/emdash-commerce-contracts` — versioned domain, money, provider, event, and bridge contracts for EmDash.
-- `@emdash-commerce/core` — native EmDash plugin, repositories, domain workflows, provider bridge, admin pages, and storefront client.
-- `@emdash-commerce/test-fixtures` — reserved workspace package for shared provider fixtures.
+| Package | Purpose |
+|---|---|
+| `@gmsas95/emdash-commerce-contracts` | Shared domain types (Money, OrderSnapshot, BridgeRequest/Response, CommerceEvent), signing helpers |
+| `@emdash-commerce/core` | Native EmDash plugin: domain logic, storage repositories, routes, MCP tools, React admin |
 
-Payment and logistics integrations are not bundled in this repository. They are independent EmDash plugins installed alongside Commerce Core.
+## Format
+
+Native plugin (`format: "native"`): runs in-process, ships React admin pages, registers
+via the descriptor factory + `createPlugin()` pair. Storage uses 13 declared document
+collections (products, variants, inventory, reservations, carts, orders, orderEvents,
+orderNotes, customers, addresses, promotions, taxRules, fulfillments) provisioned
+automatically.
+
+## Admin surface (`/_emdash/admin/plugins/emdash-commerce`)
+
+- **Dashboard** — revenue/paid-orders/AOV/items-sold tiles, zero-filled 14-day sales bar
+  chart, recent orders, low-stock alerts
+- **Products** — CRUD with variants + options, sale price, images, per-SKU inventory levels
+- **Inventory** — inline stock editing (reserved-floor guarded), active holds feed
+  (held vs confirmed), low-stock highlighting against `settings:lowStockThreshold`
+- **Orders** — status filter, right-side detail drawer: line items, addresses, payment
+  meta, state-machine transitions (with cancel confirmation), provider refunds,
+  private/customer notes
+- **Customers** — total spent + last-order columns, drill-down drawer with order history
+- **Settings** — store name/email, default currency, low-stock threshold
+
+Buttons follow a two-variant system (`commerce-btn`, `commerce-btn-secondary`,
+`commerce-btn-sm`) built on the host's kumo design tokens.
+
+## Storefront routes (public)
+
+| Route | Method | Purpose |
+|---|---|---|
+| `catalog` | GET | Published products + published variants |
+| `cart` | POST | Create cart / add line (server-side pricing only) |
+| `checkout` | POST | Idempotent checkout → order snapshot + provider `checkoutUrl`; reserves stock; sends confirmation email when address known |
+| `order` | POST | Guest order lookup by `orderId` + `orderAccessToken` |
+
+## Admin routes (session-authenticated)
+
+`products`, `products/detail|save|archive`, `inventory`, `inventory/update`,
+`inventory/holds`, `orders`, `orders/status`, `orders/refund`, `orders/notes`,
+`customers`, `customers/detail`, `stats`, `settings/get`, `settings/save`,
+`provider-status`, plus the signed `bridge/events` webhook for provider events.
+
+## Order lifecycle
+
+`draft → pending_payment → paid → processing → partially_fulfilled → fulfilled → completed`,
+with `failed`, `cancelled`, `refunded` branches enforced by a pure state machine
+(`transitionOrder`). Admin actions expose only state-changing commands; bridge events own
+payment transitions. Stock is reserved at checkout, consumed on payment, released on
+failure/cancel/refund, and stale holds expire via maintenance (lazy self-heal + cron hook).
+
+## Emails
+
+With the `email:send` capability and a site email provider configured:
+order confirmation (checkout), payment-failed notice (bridge event), refund receipt.
+Silently skipped otherwise.
+
+## Payments bridge
+
+Commands are HMAC-signed (`bridge/signature.ts`) versioned envelopes;
+`commerce.payment.create|status|refund`. Providers emit normalized
+`commerce.payment.*` events with stable delivery IDs; core persists them to
+`orderEvents` (idempotent) and applies transitions. See `src/commerce-bridge.ts`
+in the CHIP plugin for the provider side.
 
 ## Development
 
-Requirements: Node.js 20+ and pnpm 10.
-
 ```sh
 pnpm install
-pnpm test
-pnpm typecheck
-pnpm build
+pnpm test        # vitest across contracts + core
+pnpm typecheck   # tsc --noEmit
+pnpm build       # compile core dist (contracts then core)
 ```
 
-The built-package smoke check verifies that a consumer can import the emitted core package and resolve the built contracts package:
+Deploy the starter site:
 
 ```sh
-pnpm --filter @emdash-commerce/core test:consumer
+cd apps/commerce-starter
+set -a; . ./.env.production; set +a   # PUBLIC_SITE_URL + COMMERCE_BRIDGE_SECRET
+pnpm run deploy                        # build + wrangler deploy
 ```
 
-## Native plugin
-
-Commerce is installed as a native EmDash plugin. It exposes:
-- Dashboard, products, inventory, orders, customers, and settings admin pages.
-- Persisted product CRUD with variants, inventory, non-destructive archive, and
-  authenticated EmDash media uploads.
-- Storefront routes for catalog, cart, checkout, token-protected order status,
-  and the checkout result flow.
-- `POST /bridge/events` for authenticated provider events.
-- Scoped indexed storage collections for Commerce-owned records, persisted in
-  EmDash's D1-backed plugin storage.
-- Product images are stored through EmDash's configured media adapter, which is
-  R2-backed in the Cloudflare starter.
-
-The plugin route boundary uses EmDash's parsed route input. Provider events use the canonical `getCommerceEventSigningData()` representation before HMAC signing. Provider event requests include the provider identity and bridge signature headers documented by the bridge client and contracts.
-
-## Checkout and providers
-
-A deployment must configure at least one payment provider before checkout can return a hosted payment URL. Providers may be configured through:
-
-- a runtime provider implementation in trusted tests or host code; or
-- a serializable `paymentBridges` connection that reaches an independently installed provider plugin.
-
-Payment commands carry stable idempotency keys. Providers must honor those keys when creating hosted payments or other side effects.
-
-Logistics providers are selected and called through the same versioned bridge boundary. Commerce does not import provider internals or provider storage.
-
-## Security boundaries
-
-- Never send provider secrets or authoritative totals to the browser.
-- Public checkout routes reject client-provided totals.
-- Money values are safe integer minor units only.
-- Bridge signatures use HMAC-SHA-256, canonical payloads, timestamps, replay stores, and delivery IDs.
-- Outbox deliveries use idempotency keys, claims, leases, bounded retries, and terminal errors.
-- Public catalog results filter to published products.
-
-## Current scope
-
-This repository contains the Commerce Core and Contracts implementation. A complete customer deployment additionally needs:
-
-1. EmDash itself.
-2. At least one payment plugin.
-3. Optional logistics, tax, or promotion extensions.
-4. Customer-owned deployment bindings, domains, database, storage, and secrets.
-
-The standalone provider plugins and an official starter distribution are separate deliverables.
-
-## Deployable starter
-
-`apps/commerce-starter` is a Cloudflare deployment based on EmDash's upstream
-`templates/starter-cloudflare`. It registers Commerce Core and the CHIP payment
-plugin together, with D1, R2, KV sessions, and the Commerce event scheduler.
-
-```sh
-pnpm install
-pnpm --filter @gmsas95/emdash-commerce-starter deploy
-```
-
-Then open `/_emdash/admin/setup`, configure CHIP credentials and callback URLs
-in the CHIP plugin settings, set the Commerce bridge secret, and create a
-published product before starting checkout. The full client onboarding and
-route checklist is in
-[`apps/commerce-starter/README.md`](apps/commerce-starter/README.md).
-
-The starter provisions customer-owned Cloudflare resources. Replace the
-example Worker, D1, R2, and KV names/IDs before deploying to a new account.
+See [`CHANGELOG.md`](../CHANGELOG.md) for release history.

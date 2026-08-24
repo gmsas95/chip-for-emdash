@@ -204,21 +204,24 @@ const COMMERCE_ADMIN_CSS = `
   cursor: not-allowed;
 }
 .commerce-admin button { cursor: pointer; font: inherit; }
-.commerce-admin .commerce-btn {
+.commerce-admin .commerce-btn,
+.commerce-admin .commerce-btn-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   min-height: 38px;
   padding: 8px 16px;
-  border: 1px solid var(--commerce-accent);
   border-radius: 9px;
-  background: var(--commerce-accent);
-  color: var(--text-color-kumo-inverse, #fff);
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
   transition: background .12s ease, border-color .12s ease, opacity .12s ease;
+}
+.commerce-admin .commerce-btn {
+  background: var(--commerce-accent);
+  border: 1px solid var(--commerce-accent);
+  color: var(--text-color-kumo-inverse, #fff);
 }
 .commerce-admin .commerce-btn:hover { background: var(--commerce-accent-hover); border-color: var(--commerce-accent-hover); }
 .commerce-admin .commerce-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--commerce-focus) 35%, transparent); outline-offset: 1px; }
@@ -231,7 +234,7 @@ const COMMERCE_ADMIN_CSS = `
 }
 .commerce-admin .commerce-btn-secondary {
   background: var(--commerce-surface);
-  border-color: var(--commerce-line);
+  border: 1px solid var(--commerce-line);
   color: var(--commerce-ink);
 }
 .commerce-admin .commerce-btn-secondary:hover { background: var(--commerce-surface-soft); border-color: var(--commerce-muted); }
