@@ -208,6 +208,105 @@ async function providerStatusRoute(options: CommercePluginOptions, context: Rout
 
 const DASHBOARD_WINDOW_DAYS = 14;
 
+export function csvEscape(value: unknown): string {
+  const text = value === undefined || value === null ? "" : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function toCsv(headers: readonly string[], rows: ReadonlyArray<ReadonlyArray<unknown>>): string {
+  return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+}
+
+function parseIdFilter(input: Record<string, unknown>): Set<string> | undefined {
+  if (typeof input.ids !== "string" || input.ids.trim() === "") return undefined;
+  const ids = input.ids.split(",").map((id) => id.trim()).filter((id) => id !== "");
+  return ids.length > 0 ? new Set(ids) : undefined;
+}
+
+function resolveOrderFilters(repositories: CommerceRepositories, input: Record<string, unknown>): Promise<Record<string, string>> {
+  const where: Record<string, string> = {};
+  if (typeof input.status === "string" && input.status !== "") where.status = input.status;
+  const emailPromise = typeof input.email === "string" && input.email !== ""
+    ? repositories.customers.query({ where: { email: input.email }, limit: 1 }).then((page) => {
+        if (page.items[0]) where.customerId = page.items[0].id;
+      })
+    : Promise.resolve();
+  return emailPromise.then(() => where);
+}
+
+async function ordersExportRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "GET");
+  const input = isRecord(context.input) ? context.input : {};
+  const repositories = repositoriesFromContext(context);
+  const idFilter = parseIdFilter(input);
+  const where = await resolveOrderFilters(repositories, input);
+
+  const headers = ["order_ref", "order_id", "status", "payment_status", "currency", "total_minor", "customer_name", "customer_email", "provider", "created_at"];
+  const rows: Array<Array<unknown>> = [];
+  let cursor: string | undefined;
+  do {
+    const page = await repositories.orders.query({
+      ...(Object.keys(where).length > 0 ? { where } : {}),
+      limit: 100,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    for (const { id, data } of page.items) {
+      if (idFilter && !idFilter.has(id)) continue;
+      if (!isRecord(data)) continue;
+      const customer = isRecord(data.customer) ? data.customer : {};
+      rows.push([
+        typeof data.orderNumber === "number" ? `#${data.orderNumber}` : data.orderId ?? id,
+        id,
+        data.status ?? "",
+        data.paymentStatus ?? "",
+        data.currency ?? "",
+        data.totalMinor ?? "",
+        customer.name ?? "",
+        customer.email ?? "",
+        data.paymentProviderId ?? "",
+        data.createdAt ?? "",
+      ]);
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor !== undefined);
+
+  return { filename: `orders-${new Date().toISOString().slice(0, 10)}.csv`, csv: toCsv(headers, rows) };
+}
+
+async function customersExportRoute(context: RouteContext): Promise<unknown> {
+  requireMethod(context, "GET");
+  const input = isRecord(context.input) ? context.input : {};
+  const repositories = repositoriesFromContext(context);
+  const idFilter = parseIdFilter(input);
+  const spend = await customerSpendIndex(repositories);
+
+  const headers = ["customer_id", "name", "email", "phone", "status", "order_count", "total_spent_minor", "last_order_at", "created_at"];
+  const rows: Array<Array<unknown>> = [];
+  let cursor: string | undefined;
+  do {
+    const page = await repositories.customers.query({ limit: 100, ...(cursor === undefined ? {} : { cursor }) });
+    for (const { id, data } of page.items) {
+      if (idFilter && !idFilter.has(id)) continue;
+      if (!isRecord(data)) continue;
+      const totals = spend.get(id);
+      rows.push([
+        id,
+        data.name ?? "",
+        data.email ?? "",
+        data.phone ?? "",
+        data.status ?? "",
+        data.orderCount ?? 0,
+        totals?.totalSpentMinor ?? 0,
+        totals?.lastOrderAt ?? "",
+        data.createdAt ?? "",
+      ]);
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor !== undefined);
+
+  return { filename: `customers-${new Date().toISOString().slice(0, 10)}.csv`, csv: toCsv(headers, rows) };
+}
+
 async function statsRoute(context: RouteContext): Promise<unknown> {
   requireMethod(context, "GET");
   const repositories = repositoriesFromContext(context);
@@ -1041,11 +1140,13 @@ export function createPlugin(options: CommercePluginOptions = {}): ResolvedPlugi
       "settings/get": { public: false, handler: settingsGetRoute },
       "settings/save": { public: false, handler: settingsSaveRoute },
       customers: { public: false, handler: customersRoute },
+      "customers/export": { public: false, handler: customersExportRoute },
       "customers/detail": { public: false, handler: customersDetailRoute },
       cart: { public: true, handler: cartRoute },
       checkout: { public: true, handler: (context) => checkoutRoute(options, context) },
       order: { public: true, handler: publicOrderRoute },
       orders: { public: false, handler: ordersRoute },
+      "orders/export": { public: false, handler: ordersExportRoute },
       "orders/refund": { public: false, handler: (context) => refundOrderRoute(options, context) },
       "orders/status": { public: false, handler: orderStatusRoute },
       "orders/notes": { public: false, handler: orderNotesRoute },

@@ -106,6 +106,18 @@ export function formatMinorAmount(amountMinor: number, currency: string): string
   }).format(amount / 100);
 }
 
+export function downloadTextFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 const COMMERCE_ADMIN_CSS = `
 .commerce-admin {
   --commerce-ink: var(--text-color-kumo-default);

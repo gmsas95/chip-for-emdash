@@ -5,6 +5,7 @@ All notable changes to the EmDash Commerce workspace (commerce core + contracts 
 ## [Unreleased] — 2026-08-23
 
 ### Added
+- **Bulk selection + CSV exports** — checkbox multi-select on Orders and Customers; `orders/export` and `customers/export` routes stream the full filtered list (or just selected ids) as escaped CSV with computed spend columns.
 - **Launch essentials** — merchant new-order email alert (to `settings:storeEmail`), server-side order filtering by status/customer email, and cursor pagination with a Load-more control.
 - **WooCommerce-parity audit** of commerce core against WooCommerce; findings drove this cycle.
 - **Inventory reservations end-to-end** — stock reserved at checkout (deterministic ids, 60-min TTL), consumed on `payment_paid`, released on failed/cancelled/refunded, stale holds expired via maintenance.
