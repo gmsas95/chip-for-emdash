@@ -196,7 +196,7 @@ export function OrderDetail({ orderId, apiBasePath, onChanged }: AdminPageProps 
             </p>
             <section aria-labelledby="commerce-order-actions">
               <h2 id="commerce-order-actions">Actions</h2>
-              <div className="commerce-admin-toolbar" style={{ justifyContent: "flex-start", alignItems: "center" }}>
+              <div className="commerce-admin-toolbar">
                 <select
                   aria-label="Change order status"
                   value=""

@@ -66,7 +66,7 @@ export function SettingsPage({ apiBasePath }: AdminPageProps): AdminPageElement 
               <input name="lowStockThreshold" type="number" min={1} max={1000} step={1} defaultValue={settings.data?.lowStockThreshold} />
             </label>
             {save.error ? <p role="alert">{save.error}</p> : null}
-            <div className="commerce-admin-toolbar" style={{ justifyContent: "flex-start", alignItems: "center" }}>
+            <div className="commerce-admin-toolbar">
               <button type="submit" className="commerce-btn" disabled={save.loading}>{save.loading ? "Saving…" : "Save settings"}</button>
               {!save.loading && !save.error && savedAt ? <span role="status">Saved at {savedAt}</span> : null}
             </div>

@@ -276,8 +276,19 @@ const COMMERCE_ADMIN_CSS = `
 .commerce-admin a { color: var(--text-color-kumo-link, var(--commerce-accent)); font-weight: 700; }
 .commerce-admin fieldset { display: grid; gap: 12px; margin: 14px 0; border: 1px solid var(--commerce-line); border-radius: 10px; padding: 16px; }
 .commerce-admin legend { padding: 0 6px; font-weight: 750; }
-.commerce-admin .commerce-admin-toolbar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 14px; align-items: flex-end; flex-wrap: wrap; }
+.commerce-admin .commerce-admin-toolbar { display: flex; justify-content: flex-start; align-items: flex-end; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.commerce-admin .commerce-admin-toolbar > * { margin: 0; }
+.commerce-admin .commerce-admin-toolbar label {
+  display: grid;
+  gap: 6px;
+  color: var(--commerce-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.commerce-admin .commerce-admin-toolbar select,
+.commerce-admin .commerce-admin-toolbar input[type="search"] { min-width: 200px; }
 .commerce-admin .commerce-admin-toolbar .commerce-btn { min-height: 42px; }
+.commerce-admin .commerce-admin-toolbar [role="status"] { align-self: center; }
 .commerce-admin [role="alert"] { border: 1px solid var(--commerce-danger); border-radius: 10px; padding: 12px 14px; background: var(--color-kumo-danger-tint, var(--commerce-surface-soft)); color: var(--text-color-kumo-danger, var(--commerce-danger)); }
 .commerce-admin [role="status"] { color: var(--commerce-muted); }
 .commerce-admin .commerce-skeleton { height: 72px; border-radius: 12px; background: linear-gradient(90deg, var(--commerce-surface-soft), var(--commerce-surface), var(--commerce-surface-soft)); background-size: 200% 100%; animation: commerce-skeleton 1.2s ease-in-out infinite; }

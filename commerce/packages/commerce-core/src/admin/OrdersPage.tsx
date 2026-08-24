@@ -135,7 +135,7 @@ export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
 
   return (
     <AdminPageShell title="Orders">
-      <div className="commerce-admin-toolbar" style={{ justifyContent: "flex-start", alignItems: "flex-end", flexWrap: "wrap" }}>
+      <div className="commerce-admin-toolbar">
         <label>
           Status
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -144,7 +144,7 @@ export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
             ))}
           </select>
         </label>
-        <form onSubmit={(event) => void applyEmail(event)} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+        <form onSubmit={(event) => void applyEmail(event)} >
           <label>
             Customer email
             <input

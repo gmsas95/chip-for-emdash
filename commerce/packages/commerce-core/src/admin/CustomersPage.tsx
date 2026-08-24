@@ -66,7 +66,7 @@ export function CustomersPage({ apiBasePath }: AdminPageProps): AdminPageElement
 
   return (
     <AdminPageShell title="Customers">
-      <div className="commerce-admin-toolbar" style={{ justifyContent: "space-between", alignItems: "center" }}>
+      <div className="commerce-admin-toolbar">
         <span style={{ color: "var(--commerce-muted)", fontSize: 13 }}>
           {selected.size > 0 ? `${selected.size} selected` : "Click a row for details."}
         </span>
