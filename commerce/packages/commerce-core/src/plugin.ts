@@ -614,6 +614,17 @@ async function checkoutRoute(options: CommercePluginOptions, context: RouteConte
     if (confirmationEmail) {
       await sendCommerceEmail(context, confirmationEmail);
     }
+    const storeEmail = await context.kv?.get<string>("settings:storeEmail");
+    if (typeof storeEmail === "string" && storeEmail.includes("@") && storeEmail !== confirmationEmail?.to) {
+      const lineSummary = order.lines
+        .map((line) => `${line.quantity}× ${line.name}`)
+        .join(", ");
+      await sendCommerceEmail(context, {
+        to: storeEmail,
+        subject: `New order ${order.orderId} — ${(order.totalMinor / 100).toFixed(2)} ${order.currency}`,
+        text: `A new order was placed.\n\nOrder: ${order.orderId}\nCustomer: ${preparedCustomer?.snapshot.name ?? "Guest"} (${preparedCustomer?.snapshot.email ?? "no email"})\nItems: ${lineSummary}\nTotal: ${(order.totalMinor / 100).toFixed(2)} ${order.currency}\n\nOpen the admin to manage it.`,
+      });
+    }
     return { ...storedResult, orderAccessToken: order.orderAccessToken };
   } catch (error) {
     try {
@@ -658,7 +669,22 @@ async function ordersRoute(context: RouteContext): Promise<unknown> {
       return order;
     }
     await ensureLegacyOrderStatuses(context);
-    return repositories.orders.query({ limit: 50 });
+    const where: Record<string, unknown> = {};
+    if (typeof input.status === "string" && input.status !== "") {
+      where.status = input.status;
+    }
+    if (typeof input.email === "string" && input.email !== "") {
+      const customer = (await repositories.customers.query({ where: { email: input.email }, limit: 1 })).items[0];
+      if (!customer) return { items: [], hasMore: false };
+      where.customerId = customer.id;
+    }
+    const rawLimit = typeof input.limit === "number" ? input.limit : Number.parseInt(String(input.limit ?? ""), 10);
+    const limit = Number.isSafeInteger(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 100) : 50;
+    return repositories.orders.query({
+      ...(Object.keys(where).length > 0 ? { where: where as Record<string, string> } : {}),
+      limit,
+      ...(typeof input.cursor === "string" && input.cursor !== "" ? { cursor: input.cursor } : {}),
+    });
   }
   requireMethod(context, "POST");
 

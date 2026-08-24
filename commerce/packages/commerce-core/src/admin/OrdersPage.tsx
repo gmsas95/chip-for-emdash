@@ -1,16 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Drawer } from "./Drawer.js";
 import { formatOrderRef, OrderDetail } from "./OrderDetail.js";
-import { AdminPageShell, DataState, formatMinorAmount, useCommerceData, type AdminPageElement, type AdminPageProps } from "./shared.js";
+import { AdminPageShell, DataState, formatMinorAmount, requestCommerce, useCommerceData, type AdminPageElement, type AdminPageProps } from "./shared.js";
 
 interface OrderRow {
   id: string;
-  data: {
+  data?: {
     orderId?: string;
     status?: string;
     currency?: string;
     totalMinor?: number;
-    lines?: Array<{ name: string; quantity: number; totalMinor: number }>;
     customer?: { name?: string; email?: string };
     paymentProviderId?: string;
     orderNumber?: number;
@@ -36,45 +35,114 @@ function statusText(status?: string): string {
   return (status !== undefined && ORDER_STATUS_LABELS[status]) || status || "created";
 }
 
+function buildOrdersQuery(statusFilter: string, emailQuery: string, cursor?: string): string {
+  const params = new URLSearchParams();
+  if (statusFilter !== "all") params.set("status", statusFilter);
+  if (emailQuery.trim() !== "") params.set("email", emailQuery.trim());
+  if (cursor) params.set("cursor", cursor);
+  const suffix = params.toString();
+  return `/orders${suffix === "" ? "" : `?${suffix}`}`;
+}
 
 export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
-  const result = useCommerceData<{ items: OrderRow[] }>("/orders", apiBasePath);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [emailInput, setEmailInput] = useState("");
+  const [appliedEmail, setAppliedEmail] = useState("");
+  const [extraRows, setExtraRows] = useState<OrderRow[]>([]);
+  const [nextCursor, setNextCursor] = useState<string>();
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string>();
+
   const [selectedOrderId, setSelectedOrderId] = useState<string>();
-  const items = (result.data?.items ?? []).filter(({ data }) => statusFilter === "all" || data.status === statusFilter);
+  const listPath = buildOrdersQuery(statusFilter, appliedEmail);
+  const result = useCommerceData<{ items: OrderRow[]; cursor?: string; hasMore?: boolean }>(listPath, apiBasePath);
+
+  useEffect(() => {
+    setExtraRows([]);
+    setNextCursor(undefined);
+  }, [statusFilter, appliedEmail]);
+
+  async function loadMore(): Promise<void> {
+    const cursor = nextCursor ?? result.data?.cursor;
+    if (!cursor) return;
+    setLoadingMore(true);
+    setLoadError(undefined);
+    try {
+      const page = await requestCommerce<{ items: OrderRow[]; cursor?: string; hasMore?: boolean }>(
+        buildOrdersQuery(statusFilter, appliedEmail, cursor),
+        "GET",
+        undefined,
+        apiBasePath,
+      );
+      setExtraRows((rows) => [...rows, ...page.items]);
+      setNextCursor(page.hasMore ? page.cursor : undefined);
+    } catch (reason) {
+      setLoadError(reason instanceof Error ? reason.message : "Could not load more orders");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  function applyEmail(event: React.FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setAppliedEmail(emailInput);
+  }
+
+  const rows = [...(result.data?.items ?? []), ...extraRows].filter(Boolean);
+  const hasMore = nextCursor !== undefined || (extraRows.length === 0 && result.data?.hasMore === true);
 
   return (
     <AdminPageShell title="Orders">
-      <div className="commerce-admin-toolbar" style={{ justifyContent: "flex-start" }}>
+      <div className="commerce-admin-toolbar" style={{ justifyContent: "flex-start", alignItems: "flex-end", flexWrap: "wrap" }}>
         <label>
-          Filter by status
+          Status
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             {FILTER_OPTIONS.map((option) => (
               <option key={option} value={option}>{option === "all" ? "All statuses" : ORDER_STATUS_LABELS[option]}</option>
             ))}
           </select>
         </label>
+        <form onSubmit={(event) => void applyEmail(event)} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <label>
+            Customer email
+            <input
+              type="search"
+              value={emailInput}
+              placeholder="Search by email…"
+              onChange={(event) => setEmailInput(event.target.value)}
+            />
+          </label>
+          <button type="submit" className="commerce-btn">Search</button>
+        </form>
       </div>
       <DataState {...result}>
         <table>
           <thead><tr><th scope="col">Order</th><th scope="col">Customer</th><th scope="col">Total</th><th scope="col">Payment</th><th scope="col">Status</th></tr></thead>
           <tbody>
-            {items.length === 0 ? <tr><td colSpan={5}>No orders yet.</td></tr> : null}
-            {items.map(({ id, data }) => (
+            {rows.length === 0 ? <tr><td colSpan={5}>No orders match.</td></tr> : null}
+            {rows.map((row) => (
               <tr
-                key={id}
+                key={row.id}
                 style={{ cursor: "pointer" }}
-                onClick={() => setSelectedOrderId(id)}
+                onClick={() => setSelectedOrderId(row.id)}
               >
-                <th scope="row" title={data.orderId ?? id}>{formatOrderRef({ orderNumber: data.orderNumber, orderId: data.orderId, id })}</th>
-                <td>{data.customer?.name ?? data.customer?.email ?? "Guest"}</td>
-                <td>{formatMinorAmount(data.totalMinor ?? 0, data.currency ?? "MYR")}</td>
-                <td>{data.paymentProviderId ?? "—"}</td>
-                <td>{statusText(data.status)}</td>
+                <th scope="row" title={row.id}>{formatOrderRef({ orderNumber: row.data?.orderNumber, orderId: row.data?.orderId, id: row.id })}</th>
+                <td>{row.data?.customer?.name ?? row.data?.customer?.email ?? "Guest"}</td>
+                <td>{formatMinorAmount(row.data?.totalMinor ?? 0, row.data?.currency ?? "MYR")}</td>
+                <td>{row.data?.paymentProviderId ?? "—"}</td>
+                <td>{statusText(row.data?.status)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        {hasMore ? (
+          <div className="commerce-admin-toolbar" style={{ justifyContent: "center", marginTop: 12 }}>
+            <button type="button" className="commerce-btn-secondary" onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          </div>
+        ) : null}
+        {loadError ? <p role="alert">{loadError}</p> : null}
       </DataState>
       {selectedOrderId ? (
         <Drawer title="Order details" ariaLabel={`Order ${selectedOrderId} details`} onClose={() => setSelectedOrderId(undefined)}>

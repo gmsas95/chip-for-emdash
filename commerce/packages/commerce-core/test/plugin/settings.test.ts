@@ -187,3 +187,36 @@ describe("Commerce lifecycle emails", () => {
     expect(sent[0]?.subject).toContain("refund");
   });
 });
+
+describe("Commerce merchant notifications", () => {
+  it("alerts the configured store email about new orders", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 500, currency: "MYR" });
+    const kvValues = new Map<string, unknown>([["settings:storeEmail", "owner@tehtarik.test"]]);
+    const sent: SentMessage[] = [];
+    const plugin = createPlugin({ paymentProviders: { chip: { createPayment: async () => ({ checkoutUrl: "https://pay.test/x" }) } } });
+    const storage = storageFor(repositories);
+
+    const cart = await plugin.routes.cart.handler(checkoutContext(storage, kvValues, { line: { productId: "p-1", quantity: 2 } })) as { id: string };
+    await plugin.routes.checkout.handler(checkoutContext(storage, kvValues, { cartId: cart.id, paymentProvider: "chip", customer: { name: "Ada", email: "ada@example.test" } }, makeEmail(sent)));
+
+    expect(sent.map((message) => message.to)).toContain("owner@tehtarik.test");
+    const alert = sent.find((message) => message.to === "owner@tehtarik.test");
+    expect(alert?.subject).toMatch(/new order/i);
+    expect(alert?.text).toContain("ada@example.test");
+  });
+
+  it("skips the merchant alert when no store email is configured", async () => {
+    const repositories = createMemoryRepositories();
+    await repositories.products.put("p-1", { id: "p-1", status: "published", name: "Tea", priceMinor: 500, currency: "MYR" });
+    const kvValues = new Map<string, unknown>();
+    const sent: SentMessage[] = [];
+    const plugin = createPlugin({ paymentProviders: { chip: { createPayment: async () => ({ checkoutUrl: "https://pay.test/x" }) } } });
+    const storage = storageFor(repositories);
+
+    const cart = await plugin.routes.cart.handler(checkoutContext(storage, kvValues, { line: { productId: "p-1", quantity: 1 } }, makeEmail(sent))) as { id: string };
+    await plugin.routes.checkout.handler(checkoutContext(storage, kvValues, { cartId: cart.id, paymentProvider: "chip" }, makeEmail(sent)));
+
+    expect(sent).toHaveLength(0);
+  });
+});

@@ -200,3 +200,50 @@ describe("Commerce lazy backfill on admin list", () => {
     expect(await repositories.orders.get("legacy-2")).toMatchObject({ status: "pending_payment", paymentStatus: "pending" });
   });
 });
+
+describe("Commerce orders list filtering and paging", () => {
+  async function seedOrders(repositories: CommerceRepositories): Promise<void> {
+    await repositories.customers.put("c-1", { id: "c-1", name: "Ada", email: "ada@example.test" });
+    await repositories.orders.put("o-a", { id: "o-a", orderId: "o-a", customerId: "c-1", status: "paid", currency: "USD", totalMinor: 1000, lines: [], items: [], createdAt: "2026-01-03T00:00:00Z" } as never);
+    await repositories.orders.put("o-b", { id: "o-b", orderId: "o-b", customerId: "c-1", status: "pending_payment", currency: "USD", totalMinor: 2000, lines: [], items: [], createdAt: "2026-01-02T00:00:00Z" } as never);
+    await repositories.orders.put("o-c", { id: "o-c", orderId: "o-c", status: "paid", currency: "USD", totalMinor: 3000, lines: [], items: [], createdAt: "2026-01-01T00:00:00Z" } as never);
+  }
+
+  function listContext(storage: Record<string, unknown>, input: Record<string, unknown>) {
+    return { input, request: new Request("https://commerce.test", { method: "GET" }), storage, requestMeta: {} } as never;
+  }
+
+  it("filters by status", async () => {
+    const repositories = createMemoryRepositories();
+    await seedOrders(repositories);
+    const plugin = createPlugin();
+
+    const result = await plugin.routes.orders.handler(listContext(storageFor(repositories), { status: "paid" })) as { items: Array<{ id: string }> };
+
+    expect(result.items.map((item) => item.id).sort()).toEqual(["o-a", "o-c"]);
+  });
+
+  it("filters by customer email", async () => {
+    const repositories = createMemoryRepositories();
+    await seedOrders(repositories);
+    const plugin = createPlugin();
+
+    const result = await plugin.routes.orders.handler(listContext(storageFor(repositories), { email: "ada@example.test" })) as { items: Array<{ id: string }> };
+
+    expect(result.items.map((item) => item.id).sort()).toEqual(["o-a", "o-b"]);
+  });
+
+  it("paginates with cursor", async () => {
+    const repositories = createMemoryRepositories();
+    await seedOrders(repositories);
+    const plugin = createPlugin();
+    const storage = storageFor(repositories);
+
+    const page1 = await plugin.routes.orders.handler(listContext(storage, { limit: 2 })) as { items: Array<{ id: string }>; cursor?: string; hasMore: boolean };
+    expect(page1.items).toHaveLength(2);
+    expect(page1.hasMore).toBe(true);
+
+    const page2 = await plugin.routes.orders.handler(listContext(storage, { limit: 2, cursor: page1.cursor })) as { items: Array<{ id: string }> };
+    expect([...page1.items, ...page2.items].map((item) => item.id)).toEqual(["o-a", "o-b", "o-c"]);
+  });
+});
