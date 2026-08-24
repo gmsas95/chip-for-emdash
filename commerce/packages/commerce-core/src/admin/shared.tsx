@@ -209,6 +209,28 @@ const COMMERCE_ADMIN_CSS = `
   border-color: var(--commerce-focus);
   outline: 3px solid color-mix(in srgb, var(--commerce-focus) 22%, transparent);
 }
+.commerce-admin input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--commerce-accent);
+}
+.commerce-admin .commerce-admin-toolbar form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.commerce-admin form > button.commerce-btn,
+.commerce-admin form > button[type="submit"] {
+  justify-self: start;
+  width: auto;
+}
 .commerce-admin select:disabled, .commerce-admin input:disabled, .commerce-admin button:disabled {
   opacity: .5;
   background: var(--commerce-surface-soft);
@@ -254,7 +276,8 @@ const COMMERCE_ADMIN_CSS = `
 .commerce-admin a { color: var(--text-color-kumo-link, var(--commerce-accent)); font-weight: 700; }
 .commerce-admin fieldset { display: grid; gap: 12px; margin: 14px 0; border: 1px solid var(--commerce-line); border-radius: 10px; padding: 16px; }
 .commerce-admin legend { padding: 0 6px; font-weight: 750; }
-.commerce-admin .commerce-admin-toolbar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 14px; }
+.commerce-admin .commerce-admin-toolbar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 14px; align-items: flex-end; flex-wrap: wrap; }
+.commerce-admin .commerce-admin-toolbar .commerce-btn { min-height: 42px; }
 .commerce-admin [role="alert"] { border: 1px solid var(--commerce-danger); border-radius: 10px; padding: 12px 14px; background: var(--color-kumo-danger-tint, var(--commerce-surface-soft)); color: var(--text-color-kumo-danger, var(--commerce-danger)); }
 .commerce-admin [role="status"] { color: var(--commerce-muted); }
 .commerce-admin .commerce-skeleton { height: 72px; border-radius: 12px; background: linear-gradient(90deg, var(--commerce-surface-soft), var(--commerce-surface), var(--commerce-surface-soft)); background-size: 200% 100%; animation: commerce-skeleton 1.2s ease-in-out infinite; }
