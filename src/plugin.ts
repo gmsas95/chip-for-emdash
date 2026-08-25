@@ -27,7 +27,6 @@
 
 import { createCommerceBridgeRoutes, emitCommerceEvent } from "./commerce-bridge.js";
 import { signBridgePayload } from "./bridge/signature.js";
-import { z } from "zod";
 import type { PluginContext, RouteHandler, SandboxedPlugin, SandboxedRouteContext } from "emdash/plugin";
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -53,6 +52,42 @@ const SETTINGS_KEYS = {
 
 /** Statuses the plugin persists. PRD §4.5's five-status model, extended with `refunded` (CHIP-dashboard refunds are a real merchant flow; see README "Refunds"). */
 type PaymentStatus = "creating" | "created" | "paid" | "failed" | "cancelled" | "hold" | "refunded";
+
+const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+	creating: "Creating",
+	created: "Pending",
+	paid: "Paid",
+	failed: "Needs attention",
+	cancelled: "Cancelled",
+	hold: "On hold",
+	refunded: "Refunded",
+};
+
+export function formatPaymentAmount(amount: number, currency: string): string {
+	const code = currency.trim().toUpperCase();
+	const safeCurrency = CURRENCY_RE.test(code) ? code : "USD";
+	const safeAmount = Number.isSafeInteger(amount) && amount >= 0 ? amount : 0;
+	const formatted = new Intl.NumberFormat("en-US", {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+	}).format(safeAmount / 100);
+	return `${safeCurrency} ${formatted}`;
+}
+
+export function formatPaymentStatus(status: string): string {
+	const known = PAYMENT_STATUS_LABELS[status as PaymentStatus];
+	if (known) return known;
+	const words = status.trim().replace(/[_-]+/g, " ");
+	if (!words) return "Unknown";
+	return `${words.charAt(0).toUpperCase()}${words.slice(1).toLowerCase()}`;
+}
+
+export function formatPaymentDate(value: string): string {
+	if (!value) return "—";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return value;
+	return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
 
 interface PaymentRecord {
 	id: string;
@@ -92,17 +127,6 @@ interface ChipResult {
 	data: unknown;
 }
 
-const chipMcpSearchInput = z.object({
-	query: z.string().max(200).optional(),
-	status: z.enum(["created", "paid", "failed", "cancelled", "hold", "refunded"]).optional(),
-	limit: z.number().int().min(1).max(50).optional(),
-});
-
-const chipMcpExecuteInput = z.object({
-	operation: z.enum(["payment.list", "payment.get", "payment.create", "settings.status", "credentials.test"]),
-	arguments: z.record(z.string(), z.unknown()).optional(),
-});
-
 // ── Narrowing helpers ────────────────────────────────────────────────────
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -130,26 +154,6 @@ function getRecord(value: unknown, key: string): Record<string, unknown> | undef
 	if (!isRecord(value)) return undefined;
 	const v = value[key];
 	return isRecord(v) ? v : undefined;
-}
-
-function parseChipMcpSearchInput(value: unknown): { query: string; status?: string; limit: number } {
-	const input = isRecord(value) ? value : {};
-	const rawLimit = getNumber(input, "limit");
-	const status = getString(input, "status");
-	const allowed = ["created", "paid", "failed", "cancelled", "hold", "refunded"];
-	return {
-		query: (getString(input, "query") ?? "").slice(0, 200),
-		...(status && allowed.includes(status) ? { status } : {}),
-		limit: rawLimit && Number.isSafeInteger(rawLimit) ? Math.max(1, Math.min(50, rawLimit)) : 20,
-	};
-}
-
-function parseChipMcpExecuteInput(value: unknown): { operation: string; arguments: Record<string, unknown> } {
-	const input = isRecord(value) ? value : {};
-	const operation = getString(input, "operation");
-	const allowed = ["payment.list", "payment.get", "payment.create", "settings.status", "credentials.test"];
-	if (!operation || !allowed.includes(operation)) throw new Error("Unsupported CHIP MCP operation");
-	return { operation, arguments: getRecord(input, "arguments") ?? {} };
 }
 
 /** Validate the optional `products` passthrough. Returns undefined when absent. */
@@ -793,54 +797,6 @@ const paymentDetailHandler: RouteHandler = async (routeCtx, ctx) => {
 	return { ok: true, item: { ...record } };
 };
 
-const mcpSearchHandler: RouteHandler = async (routeCtx, ctx) => {
-	const input = parseChipMcpSearchInput(routeCtx.input);
-	const query = input.query.trim().toLowerCase();
-	const result = await ctx.storage.payments!.query({
-		...(input.status ? { where: { status: input.status } } : {}),
-		orderBy: { createdAt: "desc" },
-		limit: 100,
-	});
-	const items = result.items.flatMap(({ id, data }) => {
-		const record = asPaymentRecord(data);
-		if (!record) return [];
-		const matches = [record.reference, record.purchaseId, record.productName, record.clientEmail, record.status]
-			.some((value) => value?.toLowerCase().includes(query));
-		if (!matches) return [];
-		return [{
-			type: "payment",
-			id,
-			reference: record.reference,
-			status: record.status,
-			amount: record.amount,
-			currency: record.currency,
-			createdAt: record.createdAt,
-		}];
-	});
-	return { results: items.slice(0, input.limit) };
-};
-
-const mcpExecuteHandler: RouteHandler = async (routeCtx, ctx) => {
-	const input = parseChipMcpExecuteInput(routeCtx.input);
-	const args = input.arguments;
-	switch (input.operation) {
-		case "payment.list":
-			return paymentsHandler({ ...routeCtx, input: args }, ctx);
-		case "payment.get":
-			return paymentDetailHandler({ ...routeCtx, input: args }, ctx);
-		case "payment.create":
-			return createHandler({ ...routeCtx, input: args }, ctx);
-		case "settings.status":
-			return settingsHandler(routeCtx, ctx);
-		case "credentials.test": {
-			const settings = await loadSettings(ctx);
-			if (!settings.secretKey) return { ok: false, configured: false, error: "CHIP secret key is not configured" };
-			const result = await getChipPublicKey(ctx);
-			return { ok: result.ok, configured: true, ...(result.ok ? {} : { error: result.error ?? "CHIP credentials rejected" }) };
-		}
-	}
-};
-
 /** Private GET — current settings, with the secret key masked. */
 const settingsHandler: RouteHandler = async (_routeCtx, ctx) => {
 	const settings = await loadSettings(ctx);
@@ -964,27 +920,10 @@ export default {
 		callback: { public: true, handler: callbackHandler },
 		payments: { handler: paymentsHandler },
 		"payments/detail": { handler: paymentDetailHandler },
-		"mcp/search": { permission: "plugins:manage", handler: mcpSearchHandler },
-		"mcp/execute": { permission: "plugins:manage", handler: mcpExecuteHandler },
 		settings: { handler: settingsHandler },
 		"settings/save": { handler: settingsSaveHandler },
 		...commerceBridgeRoutes,
 		admin: { handler: adminHandler },
-	},
-	mcp: {
-		tools: {
-			search: {
-				description: "Search CHIP payment records by reference, purchase, product, customer, or status.",
-				route: "mcp/search",
-				input: chipMcpSearchInput,
-			},
-			execute: {
-				description: "Execute an allowlisted CHIP operation: payment.list, payment.get, payment.create, settings.status, or credentials.test.",
-				route: "mcp/execute",
-				input: chipMcpExecuteInput,
-				destructive: true,
-			},
-		},
 	},
 } satisfies SandboxedPlugin;
 
@@ -997,10 +936,11 @@ async function buildSettingsPage(ctx: PluginContext) {
 			blocks: [
 				{ type: "header", text: "CHIP Settings" },
 				{
-					type: "context",
-					text: "CHIP Collect credentials from the CHIP portal (chip-in.asia → Developer → API keys). Turn Test Mode on while testing — test payments use card 4444 3333 2222 1111, CVC 123.",
+					type: "section",
+					text: "Connect your CHIP Collect account. Use Test Mode credentials while setting up the integration.",
 				},
 				{ type: "divider" },
+				{ type: "section", text: "Connection\nThe secret key authenticates requests. The public key is stored for a future signature-verification upgrade." },
 				{
 					type: "form",
 					block_id: "chip-settings",
@@ -1008,7 +948,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 						{
 							type: "secret_input",
 							action_id: "secretKey",
-							label: "Secret Key",
+							label: "Secret key",
 							has_value: !!settings.secretKey,
 							placeholder: "sk_live_... / sk_test_...",
 						},
@@ -1022,7 +962,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 						{
 							type: "text_input",
 							action_id: "publicKey",
-							label: "Public Key (stored for future signature verification)",
+							label: "Public key (optional)",
 							placeholder: "PEM key from Developer → API keys",
 							initial_value: settings.publicKey,
 						},
@@ -1062,23 +1002,24 @@ async function buildSettingsPage(ctx: PluginContext) {
 							initial_value: settings.commerceEventUrl,
 						},
 					],
-					submit: { label: "Save Settings", action_id: "save_settings" },
+					submit: { label: "Save settings", action_id: "save_settings" },
 				},
 				{ type: "divider" },
+				{ type: "section", text: "After payment\nLeave return URL fields empty to send customers back to your site root after payment." },
 				{
 					type: "actions",
 					elements: [
 						{
 							type: "button",
 							action_id: "test_chip",
-							label: "Test CHIP credentials",
+							label: "Test credentials",
 							style: "primary",
 						},
 					],
 				},
 				{
 					type: "context",
-					text: "Customers are sent to CHIP's hosted checkout. Browser returns and CHIP's server callbacks hit this plugin's return route, which re-verifies the status with the CHIP API (verify-by-query) before recording it. Leave the URL fields empty to send customers back to your site root after payment.",
+					text: "Customers use CHIP's hosted checkout. Browser returns and server callbacks are re-verified against CHIP before a payment is recorded. Your secret key is never shown again after saving.",
 				},
 			],
 		};
@@ -1161,20 +1102,17 @@ async function buildPaymentsPage(ctx: PluginContext, cursor: string | undefined)
 			...(cursor ? { cursor } : {}),
 		});
 
-		const rows = result.items.flatMap(({ id, data }) => {
+		const records = result.items.flatMap(({ id, data }) => {
 			const record = asPaymentRecord(data);
-			if (!record) return [];
-			return [
-				{
-					id,
-					reference: record.reference || id,
-					amount: record.amount,
-					currency: record.currency,
-					status: record.status,
-					createdAt: record.createdAt,
-				},
-			];
+			return record ? [{ id, record }] : [];
 		});
+		const rows = records.map(({ id, record }) => ({
+			id,
+			reference: record.reference || id,
+			amount: formatPaymentAmount(record.amount, record.currency),
+			status: formatPaymentStatus(record.status),
+			createdAt: formatPaymentDate(record.createdAt),
+		}));
 
 		return {
 			blocks: [
@@ -1186,8 +1124,8 @@ async function buildPaymentsPage(ctx: PluginContext, cursor: string | undefined)
 				{
 					type: "stats",
 					items: [
-						{ label: "Paid", value: String(rows.filter((row) => row.status === "paid").length) },
-						{ label: "Needs attention", value: String(rows.filter((row) => row.status === "failed").length) },
+						{ label: "Paid", value: String(records.filter(({ record }) => record.status === "paid").length) },
+						{ label: "Needs attention", value: String(records.filter(({ record }) => record.status === "failed").length) },
 						{ label: "Visible records", value: String(rows.length) },
 					],
 				},
@@ -1210,15 +1148,14 @@ async function buildPaymentsPage(ctx: PluginContext, cursor: string | undefined)
 					block_id: "payments-table",
 					columns: [
 						{ key: "reference", label: "Reference" },
-						{ key: "amount", label: "Amount", format: "number" },
-						{ key: "currency", label: "Currency" },
+						{ key: "amount", label: "Amount" },
 						{ key: "status", label: "Status", format: "badge" },
-						{ key: "createdAt", label: "Created", format: "relative_time" },
+						{ key: "createdAt", label: "Created" },
 					],
 					rows,
 					...(result.cursor ? { next_cursor: result.cursor } : {}),
 					page_action_id: "payments_page",
-					empty_text: "No payments recorded yet — create one with the pay button on your site.",
+					empty_text: "No payments recorded yet. Create one with the pay button on your site.",
 				},
 			],
 		};
@@ -1258,13 +1195,14 @@ async function buildPaymentDetailPage(ctx: PluginContext, id: string) {
 				type: "fields",
 				fields: [
 					{ label: "Reference", value: record.reference || record.id },
-					{ label: "Status", value: record.status },
-					{ label: "Amount", value: `${record.amount} ${record.currency}` },
+					{ label: "Status", value: formatPaymentStatus(record.status) },
+					{ label: "Amount", value: formatPaymentAmount(record.amount, record.currency) },
 					{ label: "Purchase ID", value: record.purchaseId || "—" },
 					{ label: "Product", value: record.productName || "—" },
 					{ label: "Customer email", value: record.clientEmail || "—" },
-					{ label: "Created", value: record.createdAt },
-					{ label: "Updated", value: record.updatedAt },
+					{ label: "Created", value: formatPaymentDate(record.createdAt) },
+					{ label: "Paid", value: record.paidOn ? formatPaymentDate(record.paidOn) : "-" },
+					{ label: "Updated", value: formatPaymentDate(record.updatedAt) },
 				],
 			},
 			...(record.checkoutUrl ? [{ type: "section", text: "Hosted checkout URL is retained server-side for auditability." }] : []),

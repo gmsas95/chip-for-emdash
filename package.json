@@ -46,8 +46,7 @@
 		"@emdash-cms/plugin-cli": "^0.8.0",
 		"emdash": "^0.33.0",
 		"typescript": "^5.9.0",
-		"vitest": "^3.2.4",
-		"zod": "^4.4.3"
+		"vitest": "^3.2.4"
 	},
 	"repository": {
 		"type": "git",

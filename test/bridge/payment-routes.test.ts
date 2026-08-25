@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 import { getBridgeSigningData } from "@gmsas95/emdash-commerce-contracts";
 import { signBridgePayload } from "../../src/bridge/signature.js";
-import chipPlugin from "../../src/plugin.js";
+import chipPlugin, { formatPaymentAmount, formatPaymentDate, formatPaymentStatus } from "../../src/plugin.js";
 
 function context(input: unknown, ctx: unknown): never {
   return { input, request: new Request("https://chip.test/commerce/payment/create", { method: "POST" }), requestMeta: {}, ...ctx } as never;
@@ -99,6 +98,12 @@ describe("CHIP Commerce payment routes", () => {
 });
 
 describe("CHIP Block Kit admin pages", () => {
+  it("formats payment values for operator-facing views", () => {
+    expect(formatPaymentAmount(5000, "MYR")).toBe("MYR 50.00");
+    expect(formatPaymentStatus("failed")).toBe("Needs attention");
+    expect(formatPaymentDate("2026-01-02T15:04:05.000Z")).toBe("2026-01-02 15:04 UTC");
+  });
+
   it("renders a component-based settings form with masked secret fields", async () => {
     const ctx = baseContext();
     const result = await chipPlugin.routes.admin.handler(context({ type: "page_load", page: "/settings" }, ctx), ctx as never) as { blocks: Array<Record<string, unknown>> };
@@ -140,38 +145,10 @@ describe("CHIP Block Kit admin pages", () => {
   });
 });
 
-describe("CHIP MCP tools", () => {
-  it("declares search and execute tools for the site MCP endpoint", () => {
-    const tools = chipPlugin.mcp?.tools ?? {};
-    expect(Object.keys(tools)).toEqual(["search", "execute"]);
-    expect(tools.execute.destructive).toBe(true);
-  });
-  it("provides native Zod schemas for standard plugin consent serialization", () => {
-    expect(() => z.toJSONSchema(chipPlugin.mcp!.tools.search.input)).not.toThrow();
-  });
-
-  it("searches payment records through the MCP route", async () => {
-    const ctx = baseContext();
-    await ctx.storage.payments.put("payment-1", {
-      id: "payment-1",
-      purchaseId: "purchase-1",
-      returnToken: "return-token",
-      reference: "order-1",
-      amount: 5000,
-      currency: "MYR",
-      status: "paid",
-      productName: "Tea",
-      createdAt: "2026-08-22T00:00:00.000Z",
-      updatedAt: "2026-08-22T00:00:00.000Z",
-    });
-    const result = await chipPlugin.routes["mcp/search"].handler(context({ query: "tea", limit: 10 }, ctx), ctx as never) as { results: Array<Record<string, unknown>> };
-    expect(result.results).toEqual([expect.objectContaining({ type: "payment", id: "payment-1", reference: "order-1" })]);
-  });
-
-  it("executes safe credential status checks without returning the secret", async () => {
-    const ctx = baseContext();
-    const result = await chipPlugin.routes["mcp/execute"].handler(context({ operation: "settings.status", arguments: {} }, ctx), ctx as never) as { settings?: Record<string, unknown> };
-    expect(result.settings).toMatchObject({ secretKeySet: true, brandId: "brand-1" });
-    expect(JSON.stringify(result)).not.toContain("provider-secret");
+describe("CHIP MCP surface", () => {
+  it("does not expose MCP tools or routes", () => {
+    expect(chipPlugin.mcp).toBeUndefined();
+    expect(chipPlugin.routes["mcp/search"]).toBeUndefined();
+    expect(chipPlugin.routes["mcp/execute"]).toBeUndefined();
   });
 });
