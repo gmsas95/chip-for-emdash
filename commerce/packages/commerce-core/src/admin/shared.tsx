@@ -174,14 +174,14 @@ const COMMERCE_ADMIN_CSS = `
   padding: 14px 16px;
   border-bottom: 1px solid var(--commerce-line);
   vertical-align: middle;
-  font-size: 13px;
-  line-height: 1.4;
-  text-align: left;
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
 }
+.commerce-admin td { color: var(--commerce-ink); }
 .commerce-admin th { color: var(--commerce-muted); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
-.commerce-admin .commerce-admin-toolbar { padding-left: 16px; padding-right: 16px; }
-.commerce-admin .commerce-check-cell { width: 40px; text-align: center; }
-.commerce-admin .commerce-check-cell input[type="checkbox"] { vertical-align: middle; }
+.commerce-admin .commerce-admin-toolbar { padding: 0; justify-content: space-between; }
+.commerce-admin .commerce-check-cell { width: 40px; }
 .commerce-admin tbody tr:last-child th, .commerce-admin tbody tr:last-child td { border-bottom: 0; }
 .commerce-admin tbody tr:hover { background: var(--commerce-surface-soft); }
 .commerce-admin form, .commerce-admin article, .commerce-admin section {
