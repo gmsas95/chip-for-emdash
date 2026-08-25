@@ -223,13 +223,13 @@ export function OrderDetail({ orderId, apiBasePath, onChanged }: AdminPageProps 
             <section aria-labelledby="commerce-order-items">
               <h2 id="commerce-order-items">Items</h2>
               <table>
-                <thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Total</th></tr></thead>
+                <thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col" className="commerce-col-money">Total</th></tr></thead>
                 <tbody>
                   {(order.lines ?? []).map((line) => (
                     <tr key={line.lineId ?? line.name}>
                       <td>{line.name}</td>
                       <td>{line.quantity}</td>
-                      <td>{formatMinorAmount(line.totalMinor ?? 0, order.currency ?? "USD")}</td>
+                      <td className="commerce-col-money">{formatMinorAmount(line.totalMinor ?? 0, order.currency ?? "USD")}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -178,7 +178,7 @@ export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
                   onChange={toggleAll}
                 />
               </th>
-              <th scope="col">Order</th><th scope="col">Customer</th><th scope="col">Total</th><th scope="col">Payment</th><th scope="col">Status</th>
+              <th scope="col">Order</th><th scope="col">Customer</th><th scope="col" className="commerce-col-money">Total</th><th scope="col">Payment</th><th scope="col">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -199,7 +199,7 @@ export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
                 </td>
                 <th scope="row" title={row.id}>{formatOrderRef({ orderNumber: row.data?.orderNumber, orderId: row.data?.orderId, id: row.id })}</th>
                 <td>{row.data?.customer?.name ?? row.data?.customer?.email ?? "Guest"}</td>
-                <td>{formatMinorAmount(row.data?.totalMinor ?? 0, row.data?.currency ?? "MYR")}</td>
+                <td className="commerce-col-money">{formatMinorAmount(row.data?.totalMinor ?? 0, row.data?.currency ?? "MYR")}</td>
                 <td>{row.data?.paymentProviderId ?? "—"}</td>
                 <td>{statusText(row.data?.status)}</td>
               </tr>

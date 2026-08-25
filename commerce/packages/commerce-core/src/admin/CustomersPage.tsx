@@ -87,7 +87,7 @@ export function CustomersPage({ apiBasePath }: AdminPageProps): AdminPageElement
               <th scope="col" className="commerce-check-cell" onClick={(event) => event.stopPropagation()}>
                 <input type="checkbox" aria-label="Select all visible customers" checked={allVisibleSelected} onChange={toggleAll} />
               </th>
-              <th scope="col">Customer</th><th scope="col">Email</th><th scope="col">Orders</th><th scope="col">Total spent</th><th scope="col">Last order</th>
+              <th scope="col">Customer</th><th scope="col">Email</th><th scope="col">Orders</th><th scope="col" className="commerce-col-money">Total spent</th><th scope="col">Last order</th>
             </tr>
           </thead>
           <tbody>
@@ -100,7 +100,7 @@ export function CustomersPage({ apiBasePath }: AdminPageProps): AdminPageElement
                 <th scope="row">{row.name ?? row.email ?? row.id}</th>
                 <td>{row.email ?? "—"}</td>
                 <td>{row.orderCount ?? 0}</td>
-                <td>{formatMinorAmount(row.totalSpentMinor ?? 0, "MYR")}</td>
+                <td className="commerce-col-money">{formatMinorAmount(row.totalSpentMinor ?? 0, "MYR")}</td>
                 <td>{formatDate(row.lastOrderAt)}</td>
               </tr>
             ))}

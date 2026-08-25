@@ -176,12 +176,13 @@ const COMMERCE_ADMIN_CSS = `
   vertical-align: middle;
   font-size: 14px;
   line-height: 1.45;
-  text-align: center;
+  text-align: left;
 }
 .commerce-admin td { color: var(--commerce-ink); }
 .commerce-admin th { color: var(--commerce-muted); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
 .commerce-admin .commerce-admin-toolbar { padding: 0; justify-content: space-between; }
-.commerce-admin .commerce-check-cell { width: 40px; }
+.commerce-admin .commerce-check-cell { width: 40px; text-align: center; }
+.commerce-admin .commerce-col-money { text-align: right; font-variant-numeric: tabular-nums; }
 .commerce-admin tbody tr:last-child th, .commerce-admin tbody tr:last-child td { border-bottom: 0; }
 .commerce-admin tbody tr:hover { background: var(--commerce-surface-soft); }
 .commerce-admin form, .commerce-admin article, .commerce-admin section {

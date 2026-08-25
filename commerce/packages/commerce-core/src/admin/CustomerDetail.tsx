@@ -66,7 +66,7 @@ export function CustomerDetail({ customerId, apiBasePath }: AdminPageProps & { c
             <section aria-labelledby="commerce-customer-orders">
               <h2 id="commerce-customer-orders">Order history</h2>
               <table>
-                <thead><tr><th scope="col">Order</th><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Total</th></tr></thead>
+                <thead><tr><th scope="col">Order</th><th scope="col">Date</th><th scope="col">Status</th><th scope="col" className="commerce-col-money">Total</th></tr></thead>
                 <tbody>
                   {orders.length === 0 ? <tr><td colSpan={4}>No orders yet.</td></tr> : null}
                   {orders.map((order) => (
@@ -74,7 +74,7 @@ export function CustomerDetail({ customerId, apiBasePath }: AdminPageProps & { c
                       <th scope="row">{formatOrderRef(order)}</th>
                       <td>{formatDate(order.createdAt)}</td>
                       <td>{statusLabel(order.status)}</td>
-                      <td>{formatMinorAmount(order.totalMinor ?? 0, order.currency ?? "MYR")}</td>
+                      <td className="commerce-col-money">{formatMinorAmount(order.totalMinor ?? 0, order.currency ?? "MYR")}</td>
                     </tr>
                   ))}
                 </tbody>
