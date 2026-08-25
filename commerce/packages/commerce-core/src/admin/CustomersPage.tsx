@@ -84,7 +84,7 @@ export function CustomersPage({ apiBasePath }: AdminPageProps): AdminPageElement
         <table>
           <thead>
             <tr>
-              <th scope="col" style={{ width: 36 }} onClick={(event) => event.stopPropagation()}>
+              <th scope="col" className="commerce-check-cell" onClick={(event) => event.stopPropagation()}>
                 <input type="checkbox" aria-label="Select all visible customers" checked={allVisibleSelected} onChange={toggleAll} />
               </th>
               <th scope="col">Customer</th><th scope="col">Email</th><th scope="col">Orders</th><th scope="col">Total spent</th><th scope="col">Last order</th>
@@ -94,7 +94,7 @@ export function CustomersPage({ apiBasePath }: AdminPageProps): AdminPageElement
             {rows.length === 0 ? <tr><td colSpan={6}>No customers yet. Customers appear after checkout.</td></tr> : null}
             {rows.map((row) => (
               <tr key={row.id} style={{ cursor: "pointer" }} onClick={() => setSelectedCustomerId(row.id)}>
-                <td style={{ width: 36 }} onClick={(event) => event.stopPropagation()}>
+                <td className="commerce-check-cell" onClick={(event) => event.stopPropagation()}>
                   <input type="checkbox" aria-label={`Select customer ${row.id}`} checked={selected.has(row.id)} onChange={() => toggleRow(row.id)} />
                 </td>
                 <th scope="row">{row.name ?? row.email ?? row.id}</th>

@@ -135,6 +135,7 @@ const COMMERCE_ADMIN_CSS = `
   color: var(--commerce-ink);
   font-family: var(--font-emdash, ui-sans-serif, system-ui, -apple-system, sans-serif);
 }
+.commerce-admin, .commerce-admin *, .commerce-admin *::before, .commerce-admin *::after { box-sizing: border-box; }
 .commerce-admin header {
   display: flex;
   align-items: flex-end;
@@ -175,8 +176,12 @@ const COMMERCE_ADMIN_CSS = `
   vertical-align: middle;
   font-size: 13px;
   line-height: 1.4;
+  text-align: left;
 }
 .commerce-admin th { color: var(--commerce-muted); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.commerce-admin .commerce-admin-toolbar { padding-left: 16px; padding-right: 16px; }
+.commerce-admin .commerce-check-cell { width: 40px; text-align: center; }
+.commerce-admin .commerce-check-cell input[type="checkbox"] { vertical-align: middle; }
 .commerce-admin tbody tr:last-child th, .commerce-admin tbody tr:last-child td { border-bottom: 0; }
 .commerce-admin tbody tr:hover { background: var(--commerce-surface-soft); }
 .commerce-admin form, .commerce-admin article, .commerce-admin section {

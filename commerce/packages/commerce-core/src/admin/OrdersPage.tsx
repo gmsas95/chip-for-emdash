@@ -170,7 +170,7 @@ export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
         <table>
           <thead>
             <tr>
-              <th scope="col" style={{ width: 36 }} onClick={(event) => event.stopPropagation()}>
+              <th scope="col" className="commerce-check-cell" onClick={(event) => event.stopPropagation()}>
                 <input
                   type="checkbox"
                   aria-label="Select all visible orders"
@@ -189,7 +189,7 @@ export function OrdersPage({ apiBasePath }: AdminPageProps): AdminPageElement {
                 style={{ cursor: "pointer" }}
                 onClick={() => setSelectedOrderId(row.id)}
               >
-                <td style={{ width: 36 }} onClick={(event) => event.stopPropagation()}>
+                <td className="commerce-check-cell" onClick={(event) => event.stopPropagation()}>
                   <input
                     type="checkbox"
                     aria-label={`Select order ${row.id}`}
