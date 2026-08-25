@@ -1,8 +1,0 @@
----
-import Base from "../../layouts/Base.astro";
-import ClientProductDetail from "../../components/ClientProductDetail.astro";
-const slug = Astro.params.slug ?? "";
----
-<Base title="Product" description="Product detail.">
-  <div class="page-wrap section"><ClientProductDetail slug={slug} /></div>
-</Base>

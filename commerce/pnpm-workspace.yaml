@@ -1,6 +1,0 @@
-packages:
-  - "packages/*"
-  - "apps/*"
-
-onlyBuiltDependencies:
-  - "@chip-in-asia/plugin-chip-for-emdash"
