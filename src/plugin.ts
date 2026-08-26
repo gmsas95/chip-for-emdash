@@ -932,6 +932,12 @@ export default {
 async function buildSettingsPage(ctx: PluginContext) {
 	try {
 		const settings = await loadSettings(ctx);
+		const secretKeyHelp = settings.secretKey
+			? "A secret key is already configured. Enter a replacement only when rotating it; leave blank to keep the current key."
+			: "Enter the secret key used to authenticate CHIP requests. It is never revealed after saving.";
+		const bridgeSecretHelp = settings.commerceBridgeSecret
+			? "A Commerce Bridge secret is already configured. Enter a replacement only when rotating it; leave blank to keep the current key."
+			: "Optional: configure a shared Commerce Bridge secret for signed payment events.";
 		return {
 			blocks: [
 				{ type: "header", text: "CHIP Settings" },
@@ -940,7 +946,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 					text: "Connect your CHIP Collect account. Use Test Mode credentials while setting up the integration.",
 				},
 				{ type: "divider" },
-				{ type: "section", text: "Connection\nThe secret key authenticates requests. The public key is stored for a future signature-verification upgrade." },
+				{ type: "section", text: `Connection\n${secretKeyHelp}\n${bridgeSecretHelp}\nThe public key is stored for a future signature-verification upgrade.` },
 				{
 					type: "form",
 					block_id: "chip-settings",
@@ -949,7 +955,9 @@ async function buildSettingsPage(ctx: PluginContext) {
 							type: "secret_input",
 							action_id: "secretKey",
 							label: "Secret key",
-							has_value: !!settings.secretKey,
+							// Stored secrets are never sent to the browser. Keep this in
+							// replace mode instead of presenting a fake reveal action.
+							has_value: false,
 							placeholder: "sk_live_... / sk_test_...",
 						},
 						{
@@ -991,7 +999,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 							type: "secret_input",
 							action_id: "commerceBridgeSecret",
 							label: "Commerce Bridge Secret (optional)",
-							has_value: !!settings.commerceBridgeSecret,
+							has_value: false,
 							placeholder: "Shared HMAC secret",
 						},
 						{
@@ -1019,7 +1027,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 				},
 				{
 					type: "context",
-					text: "Customers use CHIP's hosted checkout. Browser returns and server callbacks are re-verified against CHIP before a payment is recorded. Your secret key is never shown again after saving.",
+					text: "Customers use CHIP's hosted checkout. Browser returns and server callbacks are re-verified against CHIP before a payment is recorded. Secrets are never revealed after saving: leave a secret field blank to keep its current value, or enter a new value to replace it.",
 				},
 			],
 		};
