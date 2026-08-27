@@ -955,9 +955,10 @@ async function buildSettingsPage(ctx: PluginContext) {
 							type: "secret_input",
 							action_id: "secretKey",
 							label: "Secret key",
-							// Stored secrets are never sent to the browser. Keep this in
-							// replace mode instead of presenting a fake reveal action.
-							has_value: false,
+							// Stored secrets are never sent to the browser. Block Kit uses
+							// this flag to render a masked value, then clears it when the
+							// operator focuses the field to enter a replacement.
+							has_value: !!settings.secretKey,
 							placeholder: "sk_live_... / sk_test_...",
 						},
 						{
@@ -999,7 +1000,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 							type: "secret_input",
 							action_id: "commerceBridgeSecret",
 							label: "Commerce Bridge Secret (optional)",
-							has_value: false,
+							has_value: !!settings.commerceBridgeSecret,
 							placeholder: "Shared HMAC secret",
 						},
 						{

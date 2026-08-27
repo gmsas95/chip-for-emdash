@@ -104,7 +104,7 @@ describe("CHIP Block Kit admin pages", () => {
     expect(formatPaymentDate("2026-01-02T15:04:05.000Z")).toBe("2026-01-02 15:04 UTC");
   });
 
-  it("renders secret fields as replace-only inputs instead of fake reveal controls", async () => {
+  it("renders configured secrets as masked replace-only inputs", async () => {
     const ctx = baseContext();
     const result = await chipPlugin.routes.admin.handler(context({ type: "page_load", page: "/settings" }, ctx), ctx as never) as { blocks: Array<Record<string, unknown>> };
     const form = result.blocks.find((block) => block.type === "form") as { fields?: Array<Record<string, unknown>> } | undefined;
@@ -118,13 +118,34 @@ describe("CHIP Block Kit admin pages", () => {
       "commerceBridgeSecret",
       "commerceEventUrl",
     ]);
-    expect(form?.fields?.find((field) => field.action_id === "secretKey")).toMatchObject({ type: "secret_input", has_value: false });
+    expect(form?.fields?.find((field) => field.action_id === "secretKey")).toMatchObject({ type: "secret_input", has_value: true });
+    expect(form?.fields?.find((field) => field.action_id === "commerceBridgeSecret")).toMatchObject({ type: "secret_input", has_value: true });
     expect(result.blocks).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "section", text: expect.stringContaining("leave blank to keep the current key") }),
-    ]));
+	]));
   });
 
-  it("renders payments as a table and opens a payment detail component", async () => {
+  it("reflects secrets written through the shared plugin KV in the admin page", async () => {
+    const values = new Map<string, unknown>();
+    const ctx = {
+      ...baseContext(),
+      kv: {
+        get: async (key: string) => values.get(key),
+        set: async (key: string, value: unknown) => { values.set(key, value); },
+      },
+    };
+
+    await chipPlugin.routes["settings/save"].handler(context({ secretKey: "mcp-written-secret", commerceBridgeSecret: "mcp-written-bridge" }, ctx), ctx as never);
+    const result = await chipPlugin.routes.admin.handler(context({ type: "page_load", page: "/settings" }, ctx), ctx as never) as { blocks: Array<Record<string, unknown>> };
+    const form = result.blocks.find((block) => block.type === "form") as { fields?: Array<Record<string, unknown>> } | undefined;
+
+    expect(form?.fields?.find((field) => field.action_id === "secretKey")).toMatchObject({ has_value: true });
+    expect(form?.fields?.find((field) => field.action_id === "commerceBridgeSecret")).toMatchObject({ has_value: true });
+    expect(JSON.stringify(result)).not.toContain("mcp-written-secret");
+    expect(JSON.stringify(result)).not.toContain("mcp-written-bridge");
+  });
+
+	it("renders payments as a table and opens a payment detail component", async () => {
     const ctx = baseContext();
     await ctx.storage.payments.put("payment-1", {
       id: "payment-1",
