@@ -118,10 +118,11 @@ describe("CHIP Block Kit admin pages", () => {
       "commerceBridgeSecret",
       "commerceEventUrl",
     ]);
-    expect(form?.fields?.find((field) => field.action_id === "secretKey")).toMatchObject({ type: "secret_input", has_value: true });
-    expect(form?.fields?.find((field) => field.action_id === "commerceBridgeSecret")).toMatchObject({ type: "secret_input", has_value: true });
+    expect(form?.fields?.find((field) => field.action_id === "secretKey")).toMatchObject({ type: "secret_input", has_value: false });
+    expect(form?.fields?.find((field) => field.action_id === "commerceBridgeSecret")).toMatchObject({ type: "secret_input", has_value: false });
     expect(result.blocks).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: "section", text: expect.stringContaining("leave blank to keep the current key") }),
+      expect.objectContaining({ type: "section", text: expect.stringContaining("Secret key: Configured") }),
+      expect.objectContaining({ type: "section", text: expect.stringContaining("Commerce Bridge secret: Configured") }),
 	]));
   });
 
@@ -139,8 +140,12 @@ describe("CHIP Block Kit admin pages", () => {
     const result = await chipPlugin.routes.admin.handler(context({ type: "page_load", page: "/settings" }, ctx), ctx as never) as { blocks: Array<Record<string, unknown>> };
     const form = result.blocks.find((block) => block.type === "form") as { fields?: Array<Record<string, unknown>> } | undefined;
 
-    expect(form?.fields?.find((field) => field.action_id === "secretKey")).toMatchObject({ has_value: true });
-    expect(form?.fields?.find((field) => field.action_id === "commerceBridgeSecret")).toMatchObject({ has_value: true });
+    expect(form?.fields?.find((field) => field.action_id === "secretKey")).toMatchObject({ has_value: false });
+    expect(form?.fields?.find((field) => field.action_id === "commerceBridgeSecret")).toMatchObject({ has_value: false });
+    expect(result.blocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "section", text: expect.stringContaining("Secret key: Configured") }),
+      expect.objectContaining({ type: "section", text: expect.stringContaining("Commerce Bridge secret: Configured") }),
+	]));
     expect(JSON.stringify(result)).not.toContain("mcp-written-secret");
     expect(JSON.stringify(result)).not.toContain("mcp-written-bridge");
   });

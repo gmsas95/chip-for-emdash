@@ -933,11 +933,11 @@ async function buildSettingsPage(ctx: PluginContext) {
 	try {
 		const settings = await loadSettings(ctx);
 		const secretKeyHelp = settings.secretKey
-			? "A secret key is already configured. Enter a replacement only when rotating it; leave blank to keep the current key."
-			: "Enter the secret key used to authenticate CHIP requests. It is never revealed after saving.";
+			? "Secret key: Configured. Enter a replacement only when rotating it; leave blank to keep the current key."
+			: "Secret key: Not configured. Enter the secret key used to authenticate CHIP requests. It is never revealed after saving.";
 		const bridgeSecretHelp = settings.commerceBridgeSecret
-			? "A Commerce Bridge secret is already configured. Enter a replacement only when rotating it; leave blank to keep the current key."
-			: "Optional: configure a shared Commerce Bridge secret for signed payment events.";
+			? "Commerce Bridge secret: Configured. Enter a replacement only when rotating it; leave blank to keep the current secret."
+			: "Commerce Bridge secret: Not configured. Optional: configure a shared Commerce Bridge secret for signed payment events.";
 		return {
 			blocks: [
 				{ type: "header", text: "CHIP Settings" },
@@ -955,10 +955,9 @@ async function buildSettingsPage(ctx: PluginContext) {
 							type: "secret_input",
 							action_id: "secretKey",
 							label: "Secret key",
-							// Stored secrets are never sent to the browser. Block Kit uses
-							// this flag to render a masked value, then clears it when the
-							// operator focuses the field to enter a replacement.
-							has_value: !!settings.secretKey,
+							// The status is shown above. Keep this empty so the shared
+							// renderer does not offer a misleading reveal action.
+							has_value: false,
 							placeholder: "sk_live_... / sk_test_...",
 						},
 						{
@@ -1000,7 +999,7 @@ async function buildSettingsPage(ctx: PluginContext) {
 							type: "secret_input",
 							action_id: "commerceBridgeSecret",
 							label: "Commerce Bridge Secret (optional)",
-							has_value: !!settings.commerceBridgeSecret,
+							has_value: false,
 							placeholder: "Shared HMAC secret",
 						},
 						{
