@@ -95,6 +95,45 @@ describe("CHIP Commerce payment routes", () => {
     expect(String(purchaseBody?.success_redirect)).toMatch(/^https:\/\/chip\.test\/checkout\/result\?token=[^&]+&status=success$/);
     expect(String(purchaseBody?.success_callback)).toMatch(/^https:\/\/chip\.test\/_emdash\/api\/plugins\/chip-for-emdash\/return\?token=[^&]+$/);
   });
+  it("maps every Commerce order item to a CHIP product", async () => {
+    const route = chipPlugin.routes["commerce/payment/create"];
+    const ctx = baseContext();
+    let purchaseBody: Record<string, unknown> | undefined;
+    ctx.http.fetch = async (_url: string, init: RequestInit | undefined) => {
+      purchaseBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      return new Response(JSON.stringify({ id: "purchase-1", checkout_url: "https://payments.example.test/checkout/1" }), { status: 200 });
+    };
+    const timestamp = new Date().toISOString();
+    const request = {
+      contract: "commerce.payment.create",
+      version: 1 as const,
+      requestId: "payment-multi",
+      idempotencyKey: "idem-multi",
+      sentAt: timestamp,
+      auth: { version: 1 as const, keyId: "commerce", timestamp, signature: "" },
+      payload: {
+        operation: "charge",
+        order: {
+          orderId: "order-multi",
+          currency: "MYR",
+          items: [
+            { lineId: "line-1", name: "Tea", quantity: 2, unitPrice: { amountMinor: 1_000, currency: "MYR" }, total: { amountMinor: 2_000, currency: "MYR" }, sku: "TEA" },
+            { lineId: "line-2", name: "Spice", quantity: 1, unitPrice: { amountMinor: 1_500, currency: "MYR" }, total: { amountMinor: 1_500, currency: "MYR" }, sku: "SPICE" },
+          ],
+          subtotal: { amountMinor: 3_500, currency: "MYR" },
+          total: { amountMinor: 3_500, currency: "MYR" },
+        },
+      },
+    };
+    request.auth.signature = await signBridgePayload("shared-secret", timestamp, getBridgeSigningData(request));
+
+    await expect(route.handler(context(request, ctx), ctx as never)).resolves.toMatchObject({ ok: true });
+    const purchase = purchaseBody?.purchase as { products?: unknown[] } | undefined;
+    expect(purchase?.products).toEqual([
+      { name: "Tea", price: 1_000, quantity: "2" },
+      { name: "Spice", price: 1_500, quantity: "1" },
+    ]);
+  });
 });
 
 describe("CHIP Block Kit admin pages", () => {

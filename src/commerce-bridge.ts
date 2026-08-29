@@ -79,13 +79,32 @@ function getCommerceEventSigningData(event: CommerceEvent<unknown>): string {
 }
 
 function parseChargePayload(input: unknown): Record<string, unknown> {
-	if (!isRecord(input) || input.operation !== "charge" || !isRecord(input.order)) throw new Error("Invalid Commerce payment command");
-	const total = input.order.total;
-	if (!isRecord(total) || typeof total.amountMinor !== "number" || !Number.isSafeInteger(total.amountMinor) || total.amountMinor < 0 || typeof total.currency !== "string" || !/^[A-Z]{3}$/.test(total.currency)) {
-		throw new Error("Invalid Commerce order total");
-	}
-	if (!Array.isArray(input.order.items)) throw new Error("Invalid Commerce order items");
-	return input;
+  if (!isRecord(input) || input.operation !== "charge" || !isRecord(input.order)) throw new Error("Invalid Commerce payment command");
+  const total = input.order.total;
+  if (!isRecord(total) || typeof total.amountMinor !== "number" || !Number.isSafeInteger(total.amountMinor) || total.amountMinor < 0 || typeof total.currency !== "string" || !/^[A-Z]{3}$/.test(total.currency)) {
+    throw new Error("Invalid Commerce order total");
+  }
+  if (!Array.isArray(input.order.items)) throw new Error("Invalid Commerce order items");
+  for (const item of input.order.items) {
+    if (!isRecord(item) || typeof item.name !== "string" || item.name.trim() === "" || typeof item.quantity !== "number" || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || !isRecord(item.unitPrice) || typeof item.unitPrice.amountMinor !== "number" || !Number.isSafeInteger(item.unitPrice.amountMinor) || item.unitPrice.amountMinor < 0 || item.unitPrice.currency !== total.currency) {
+      throw new Error("Invalid Commerce order item");
+    }
+  }
+  return input;
+}
+
+function chipProductsForOrder(order: Record<string, unknown>, fallbackName: string, fallbackAmount: number): Array<Record<string, unknown>> {
+  const items = Array.isArray(order.items) ? order.items : [];
+  if (items.length === 0) return [{ name: fallbackName, price: fallbackAmount, quantity: "1" }];
+  return items.map((item) => {
+    const line = item as Record<string, unknown>;
+    const unitPrice = line.unitPrice as Record<string, unknown>;
+    return {
+      name: line.name,
+      price: unitPrice.amountMinor,
+      quantity: String(line.quantity),
+    };
+  });
 }
 function response<T>(requestId: string, data: T): Record<string, unknown> {
 	return { requestId, ok: true, data };
@@ -238,6 +257,7 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 		if (!orderId || !currency || amount === undefined) return failure(auth.request.requestId, "INVALID_PAYMENT", "Payment command is missing order total data", false);
 		const firstItem = Array.isArray(order.items) && isRecord(order.items[0]) ? order.items[0] : undefined;
 		const name = typeof firstItem?.name === "string" ? firstItem.name : orderId;
+		const products = chipProductsForOrder(order, name, amount);
 		const lockKey = auth.request.idempotencyKey;
 		const previous = createLocks.get(lockKey);
 		let release!: () => void;
@@ -276,7 +296,7 @@ export function createCommerceBridgeRoutes(deps: BridgeDeps): Record<string, { p
 			try {
 				created = await deps.createChipPurchase(ctx, {
 					client: isRecord(order.customer) && typeof order.customer.email === "string" ? { email: order.customer.email } : {},
-					purchase: { currency, products: [{ name, price: amount, quantity: "1" }] },
+					purchase: { currency, products },
 					brand_id: auth.settings.brandId,
 					reference: orderId,
 					success_redirect: successRedirect,
